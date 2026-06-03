@@ -11,7 +11,9 @@ DEFAULT_MODEL = "claude-sonnet-4-5"
 DEFAULT_MAX_TOKENS = 1024
 
 
-def ask_claude(prompt: str, max_tokens: int = DEFAULT_MAX_TOKENS, model: str = DEFAULT_MODEL) -> str:
+def ask_claude(
+    prompt: str, max_tokens: int = DEFAULT_MAX_TOKENS, model: str = DEFAULT_MODEL
+) -> str:
     """Send a single-turn prompt to Claude and return the text response.
 
     Args:

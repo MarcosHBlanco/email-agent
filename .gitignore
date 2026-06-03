@@ -15,3 +15,4 @@ wheels/
 # Google OAuth credentials and tokens
 credentials.json
 token.json
+email_agent.db
