@@ -1,6 +1,8 @@
-"""Orchestrate a full digest run: fetch, categorize, store, and format.
+"""Orchestrate a full digest run: fetch, categorize, store, and return data.
 
 This is the conductor that ties together gmail_client, categorizer, and db.
+It returns structured data; presentation (terminal text, web JSON) is the
+caller's responsibility.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -27,8 +29,14 @@ def _hours_since_last_run() -> int:
     return max(hours, 1)
 
 
-def run_digest() -> str:
-    """Run one full digest cycle and return the formatted digest text."""
+def run_digest() -> dict:
+    """Run one full digest cycle and return structured digest data.
+
+    Returns a dict with:
+        - total: total number of emails processed
+        - generated_at: ISO timestamp of when this digest ran
+        - buckets: dict of category -> list of {subject, summary}
+    """
     db.init_db()
 
     hours_back = _hours_since_last_run()
@@ -56,16 +64,33 @@ def run_digest() -> str:
             summary=result.summary,
         )
         buckets[result.category].append(
-            {"subject": email.get("subject", "(no subject)"), "summary": result.summary}
+            {
+                "subject": email.get("subject", "(no subject)"),
+                "summary": result.summary,
+            }
         )
 
-    digest_text = _format_digest(buckets, len(emails))
-    db.save_digest(run_id=run_id, digest_text=digest_text)
-    return digest_text
+    digest_data = {
+        "total": len(emails),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "buckets": buckets,
+    }
+
+    # Store a human-readable text version in the database for the record
+    db.save_digest(run_id=run_id, digest_text=format_digest_text(digest_data))
+
+    return digest_data
 
 
-def _format_digest(buckets: dict[str, list[dict]], total: int) -> str:
-    """Turn the categorized buckets into a readable text digest."""
+def format_digest_text(digest_data: dict) -> str:
+    """Format structured digest data into readable text (for terminal/storage).
+
+    This is a presentation helper. The web frontend will format the same
+    data differently; this one produces plain text.
+    """
+    total = digest_data["total"]
+    buckets = digest_data["buckets"]
+
     lines = []
     lines.append("=" * 60)
     lines.append(f"EMAIL DIGEST  -  {total} emails processed")
