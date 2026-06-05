@@ -5,10 +5,20 @@ Exposes the digest as an HTTP endpoint that returns JSON. Run with:
 """
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from email_agent.summarizer import run_digest
 
 app = FastAPI(title="Email Agent")
+
+# Allow the frontend (running on a different origin/port) to call this API.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # Next.js frontend
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/")
