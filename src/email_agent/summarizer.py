@@ -65,8 +65,10 @@ def run_digest() -> dict:
         )
         buckets[result.category].append(
             {
+                "sender": email.get("sender", "(unknown sender)"),
                 "subject": email.get("subject", "(no subject)"),
                 "summary": result.summary,
+                "reason": result.reason,
             }
         )
 
@@ -76,8 +78,12 @@ def run_digest() -> dict:
         "buckets": buckets,
     }
 
-    # Store a human-readable text version in the database for the record
-    db.save_digest(run_id=run_id, digest_text=format_digest_text(digest_data))
+    # Store the snapshot: human-readable text + structured JSON for the frontend
+    db.save_digest(
+        run_id=run_id,
+        digest_text=format_digest_text(digest_data),
+        digest_data=digest_data,
+    )
 
     return digest_data
 

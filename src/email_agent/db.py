@@ -4,6 +4,7 @@ We store our ANALYSIS of emails (category, reason, summary) but never the
 email content itself. Gmail remains the source of truth for email content.
 """
 
+import json
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -15,7 +16,7 @@ from email_agent import config
 def get_connection():
     """Open a SQLite connection, yield it, and always close it.
 
-    Using a context manager guarantees the connection closes even if an
+    Using context manager to guarantee the connection closes even if an
     error occurs mid-operation.
     """
     conn = sqlite3.connect(config.DB_PATH)
@@ -54,6 +55,7 @@ def init_db() -> None:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 run_id INTEGER NOT NULL,
                 digest_text TEXT NOT NULL,
+                digest_json TEXT NOT NULL,
                 FOREIGN KEY (run_id) REFERENCES runs (id)
             )
             """)
@@ -86,12 +88,17 @@ def save_categorization(
         )
 
 
-def save_digest(run_id: int, digest_text: str) -> None:
-    """Insert the formatted digest text for a run."""
+def save_digest(run_id: int, digest_text: str, digest_data: dict) -> None:
+    """Store a digest snapshot: both the human-readable text and structured JSON.
+
+    digest_text  -> formatted plain text (terminal / human record)
+    digest_data  -> the structured dict the frontend needs; stored as a JSON string
+    """
+    digest_json = json.dumps(digest_data)
     with get_connection() as conn:
         conn.execute(
-            "INSERT INTO digests (run_id, digest_text) VALUES (?, ?)",
-            (run_id, digest_text),
+            "INSERT INTO digests (run_id, digest_text, digest_json) VALUES (?, ?, ?)",
+            (run_id, digest_text, digest_json),
         )
 
 
@@ -102,3 +109,18 @@ def get_last_run_time() -> str | None:
             "SELECT run_at FROM runs ORDER BY id DESC LIMIT 1"
         ).fetchone()
         return row["run_at"] if row else None
+
+
+def get_latest_digest() -> dict | None:
+    """Return the most recent stored digest as structured data, or None if none exist.
+
+    Reads the stored JSON string and parses it back into a dict. This is the
+    READ path: fast, no Claude calls, just a database lookup.
+    """
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT digest_json FROM digests ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        if row is None:
+            return None
+        return json.loads(row["digest_json"])

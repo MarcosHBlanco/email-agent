@@ -1,20 +1,23 @@
 """FastAPI web layer for the email agent.
 
-Exposes the digest as an HTTP endpoint that returns JSON. Run with:
-    uv run uvicorn email_agent.api:app --reload
+Exposes two distinct paths:
+  - GET  /digest/latest   -> read the most recent stored digest (fast, no Claude)
+  - POST /digest/process  -> run a new processing pass (slow, calls Claude)
+
 """
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from email_agent import db
 from email_agent.summarizer import run_digest
 
 app = FastAPI(title="Email Agent")
 
-# Allow the frontend (running on a different origin/port) to call this API.
+# Allow the frontend (different origin/port) to call this API.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Next.js frontend
+    allow_origins=["http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -27,8 +30,27 @@ def read_root() -> dict:
     return {"status": "ok", "service": "email-agent"}
 
 
-@app.get("/digest")
-def get_digest() -> dict:
-    """Run a full digest cycle and return the structured result as JSON."""
-    digest_data = run_digest()
-    return digest_data
+@app.get("/digest/latest")
+def get_latest_digest() -> dict:
+    """READ path: return the most recent stored digest snapshot.
+
+    Fast — just a database read, no Claude calls. Returns the stored digest,
+    or a 'no digest yet' shape if nothing has been processed.
+    """
+    digest = db.get_latest_digest()
+    if digest is None:
+        return {
+            "digest": None,
+            "message": "No digest yet. Process emails to create one.",
+        }
+    return {"digest": digest}
+
+
+@app.post("/digest/process")
+def process_digest() -> dict:
+    """WRITE path: run a new processing pass (fetch, categorize, store).
+
+    Slow — calls Claude for each new email. Returns the freshly produced digest.
+    """
+    digest = run_digest()
+    return {"digest": digest}
