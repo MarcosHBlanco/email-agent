@@ -2,8 +2,10 @@
 // Mirrors the JSON contract from the FastAPI backend.
 
 export interface EmailItem {
+	sender: string;
 	subject: string;
 	summary: string;
+	reason: string;
 }
 
 export interface DigestBuckets {
