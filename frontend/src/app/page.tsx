@@ -99,7 +99,9 @@ export default function Home() {
 						No digest yet. Click &quot;Process new emails&quot; to create one.
 					</p>
 				)}
-				{!loading && digest && <DigestView digest={digest} />}
+				{!loading && digest && (
+					<DigestView digest={digest} selected={selected} />
+				)}
 			</main>
 		</div>
 	);

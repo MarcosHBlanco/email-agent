@@ -1,20 +1,26 @@
 import { Digest } from "@/types";
 import EmailCard from "@/components/EmailCard";
 
+type CategoryFilter = "ALL" | "IMPORTANT" | "ROUTINE" | "JUNK";
+
 interface DigestViewProps {
 	digest: Digest;
+	selected: CategoryFilter;
 }
 
-const CATEGORIES = ["IMPORTANT", "ROUTINE", "JUNK"] as const;
+const ALL_CATEGORIES = ["IMPORTANT", "ROUTINE", "JUNK"] as const;
 
-export default function DigestView({ digest }: DigestViewProps) {
+export default function DigestView({ digest, selected }: DigestViewProps) {
+	// Decide which categories to show: all three if "ALL", otherwise just the one.
+	const categoriesToShow = selected === "ALL" ? ALL_CATEGORIES : [selected];
+
 	return (
 		<div>
 			<p style={{ color: "#666", marginBottom: "16px" }}>
 				{digest.total} emails processed
 			</p>
 
-			{CATEGORIES.map((category) => {
+			{categoriesToShow.map((category) => {
 				const items = digest.buckets[category];
 				return (
 					<section key={category} style={{ marginBottom: "28px" }}>
