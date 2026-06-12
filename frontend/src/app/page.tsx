@@ -59,49 +59,49 @@ export default function Home() {
 	}, []);
 
 	return (
-		<div
-			style={{ display: "flex", minHeight: "100vh", fontFamily: "sans-serif" }}
-		>
+		<div className="flex min-h-screen bg-canvas text-ink">
 			<Sidebar digest={digest} selected={selected} onSelect={setSelected} />
 
-			<main style={{ flex: 1, padding: "24px" }}>
-				<div
-					style={{
-						display: "flex",
-						justifyContent: "space-between",
-						alignItems: "center",
-						marginBottom: "20px",
-					}}
-				>
-					<h1 style={{ fontSize: "20px", color: "#222", margin: 0 }}>
-						Email Agent
-					</h1>
+			<main className="flex-1 min-w-0">
+				{/* Top bar */}
+				<header className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-canvas/80 backdrop-blur px-6 py-3.5">
+					<div className="flex items-baseline gap-2">
+						<h1 className="text-base font-semibold text-ink">Email Agent</h1>
+						{digest && (
+							<span className="text-xs text-ink-faint tabular-nums">
+								{digest.total} processed
+							</span>
+						)}
+					</div>
+
 					<button
 						onClick={processNewEmails}
 						disabled={processing}
-						style={{
-							padding: "8px 16px",
-							borderRadius: "6px",
-							border: "1px solid #1F4E79",
-							background: processing ? "#ccc" : "#1F4E79",
-							color: "#fff",
-							cursor: processing ? "default" : "pointer",
-						}}
+						className="rounded-md bg-accent px-3.5 py-1.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
 					>
-						{processing ? "Processing..." : "Process new emails"}
+						{processing ? "Processing…" : "Process new emails"}
 					</button>
-				</div>
+				</header>
 
-				{error && <p style={{ color: "red" }}>Error: {error}</p>}
-				{loading && <p>Loading latest digest...</p>}
-				{!loading && digest === null && (
-					<p>
-						No digest yet. Click &quot;Process new emails&quot; to create one.
-					</p>
-				)}
-				{!loading && digest && (
-					<DigestView digest={digest} selected={selected} />
-				)}
+				{/* Content */}
+				<div className="px-6 py-5">
+					{error && (
+						<p className="mb-4 rounded-md bg-important-soft px-3 py-2 text-sm text-important">
+							{error}
+						</p>
+					)}
+					{loading && (
+						<p className="text-sm text-ink-soft">Loading latest digest…</p>
+					)}
+					{!loading && digest === null && (
+						<p className="text-sm text-ink-soft">
+							No digest yet. Click &quot;Process new emails&quot; to create one.
+						</p>
+					)}
+					{!loading && digest && (
+						<DigestView digest={digest} selected={selected} />
+					)}
+				</div>
 			</main>
 		</div>
 	);

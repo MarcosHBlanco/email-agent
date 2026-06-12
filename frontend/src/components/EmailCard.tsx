@@ -1,32 +1,40 @@
 import { EmailItem } from "@/types";
 
+type Category = "IMPORTANT" | "ROUTINE" | "JUNK";
+
 interface EmailCardProps {
 	email: EmailItem;
+	category: Category;
 }
 
-export default function EmailCard({ email }: EmailCardProps) {
+// Maps each category to its left-border color (using your tokens)
+const BORDER_COLOR: Record<Category, string> = {
+	IMPORTANT: "border-l-important",
+	ROUTINE: "border-l-routine",
+	JUNK: "border-l-junk",
+};
+
+export default function EmailCard({ email, category }: EmailCardProps) {
 	return (
 		<div
-			style={{
-				border: "1px solid #ddd",
-				borderRadius: "6px",
-				padding: "12px 16px",
-				marginBottom: "10px",
-				background: "#fff",
-			}}
+			className={`group rounded-md border border-border border-l-2 ${BORDER_COLOR[category]} bg-surface px-4 py-3 transition-colors hover:bg-surface-hover`}
 		>
-			<div style={{ fontSize: "13px", color: "#666", marginBottom: "4px" }}>
-				{email.sender}
+			<div className="mb-1 flex items-center justify-between gap-3">
+				<span className="truncate text-xs text-ink-faint">{email.sender}</span>
 			</div>
-			<div style={{ fontWeight: 600, color: "#222", marginBottom: "6px" }}>
+
+			<h3 className="mb-1 text-[15px] font-semibold leading-snug text-ink">
 				{email.subject}
-			</div>
-			<div style={{ fontSize: "14px", color: "#333", marginBottom: "8px" }}>
+			</h3>
+
+			<p className="mb-2 text-sm leading-relaxed text-ink-soft">
 				{email.summary}
-			</div>
-			<div style={{ fontSize: "12px", color: "#888", fontStyle: "italic" }}>
-				Why: {email.reason}
-			</div>
+			</p>
+
+			<p className="text-xs italic text-ink-faint">
+				<span className="font-medium not-italic text-ink-faint">Why: </span>
+				{email.reason}
+			</p>
 		</div>
 	);
 }
