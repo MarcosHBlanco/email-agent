@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Digest } from "@/types";
-import Sidebar from "@/components/Sidebar";
+import Rail from "@/components/Rail";
 import DigestView from "@/components/DigestView";
 
 const API_BASE = "http://localhost:8000";
@@ -59,31 +59,16 @@ export default function Home() {
 	}, []);
 
 	return (
-		<div className="flex min-h-screen bg-canvas text-ink">
-			<Sidebar digest={digest} selected={selected} onSelect={setSelected} />
+		<div className="flex h-screen overflow-hidden bg-canvas text-ink">
+			<Rail
+				digest={digest}
+				selected={selected}
+				onSelect={setSelected}
+				onProcess={processNewEmails}
+				processing={processing}
+			/>
 
-			<main className="flex-1 min-w-0">
-				{/* Top bar */}
-				<header className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-canvas/80 backdrop-blur px-6 py-3.5">
-					<div className="flex items-baseline gap-2">
-						<h1 className="text-base font-semibold text-ink">Email Agent</h1>
-						{digest && (
-							<span className="text-xs text-ink-faint tabular-nums">
-								{digest.total} processed
-							</span>
-						)}
-					</div>
-
-					<button
-						onClick={processNewEmails}
-						disabled={processing}
-						className="rounded-md bg-accent px-3.5 py-1.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
-					>
-						{processing ? "Processing…" : "Process new emails"}
-					</button>
-				</header>
-
-				{/* Content */}
+			<main className="flex-1 min-w-0 overflow-y-auto">
 				<div className="px-6 py-5">
 					{error && (
 						<p className="mb-4 rounded-md bg-important-soft px-3 py-2 text-sm text-important">
