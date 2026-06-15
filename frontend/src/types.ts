@@ -2,6 +2,7 @@
 // Mirrors the JSON contract from the FastAPI backend.
 
 export interface EmailItem {
+	gmail_id: string;
 	sender: string;
 	subject: string;
 	summary: string;

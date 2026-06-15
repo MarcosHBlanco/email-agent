@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Digest } from "@/types";
 import Rail from "@/components/Rail";
-import DigestView from "@/components/DigestView";
+import EmailList from "@/components/EmailList";
 
 const API_BASE = "http://localhost:8000";
 
@@ -15,6 +15,7 @@ export default function Home() {
 	const [processing, setProcessing] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [selected, setSelected] = useState<CategoryFilter>("ALL");
+	const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
 
 	// WRITE path: run a new processing pass, then show the fresh result.
 	async function processNewEmails() {
@@ -63,7 +64,10 @@ export default function Home() {
 			<Rail
 				digest={digest}
 				selected={selected}
-				onSelect={setSelected}
+				onSelect={(category) => {
+					setSelected(category);
+					setSelectedEmailId(null);
+				}}
 				onProcess={processNewEmails}
 				processing={processing}
 			/>
@@ -84,7 +88,12 @@ export default function Home() {
 						</p>
 					)}
 					{!loading && digest && (
-						<DigestView digest={digest} selected={selected} />
+						<EmailList
+							digest={digest}
+							selected={selected}
+							selectedEmailId={selectedEmailId}
+							onSelectEmail={setSelectedEmailId}
+						/>
 					)}
 				</div>
 			</main>

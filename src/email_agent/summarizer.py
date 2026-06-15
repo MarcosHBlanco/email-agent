@@ -13,8 +13,7 @@ from email_agent.gmail_client import get_email_service, fetch_recent_emails
 
 
 def _hours_since_last_run() -> int:
-    """How many hours back should this run look?
-
+    """
     If there was a previous run, look back to just after it. Otherwise,
     fall back to the default window (first run looks back 24 hours).
     """
@@ -35,7 +34,7 @@ def run_digest() -> dict:
     Returns a dict with:
         - total: total number of emails processed
         - generated_at: ISO timestamp of when this digest ran
-        - buckets: dict of category -> list of {subject, summary}
+        - buckets: dict of category -> list of {gmail_id, sender, subject, summary, reason}
     """
     db.init_db()
 
@@ -65,6 +64,7 @@ def run_digest() -> dict:
         )
         buckets[result.category].append(
             {
+                "gmail_id": email.get("id", ""),
                 "sender": email.get("sender", "(unknown sender)"),
                 "subject": email.get("subject", "(no subject)"),
                 "summary": result.summary,
