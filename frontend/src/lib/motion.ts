@@ -6,7 +6,7 @@ import { Transition, Variants } from "motion/react";
 // Base transition: quick, with a natural ease-out curve.
 export const transition: Transition = {
 	duration: 0.18,
-	ease: [0.25, 0.1, 0.25, 1], 
+	ease: [0.25, 0.1, 0.25, 1],
 };
 
 // A slightly springier transition for elements that should feel "alive"
@@ -27,4 +27,21 @@ export const fadeInUp: Variants = {
 export const fade: Variants = {
 	hidden: { opacity: 0 },
 	visible: { opacity: 1 },
+};
+
+// Container that staggers its children's entrance (for lists).
+export const staggerContainer: Variants = {
+	hidden: { opacity: 1 }, // container itself stays visible; children animate
+	visible: {
+		opacity: 1,
+		transition: {
+			staggerChildren: 0.03, // each child starts 30ms after the previous
+		},
+	},
+};
+
+// A single list item's entrance: fade + slide up slightly.
+export const staggerItem: Variants = {
+	hidden: { opacity: 0, y: 4 },
+	visible: { opacity: 1, y: 0 },
 };

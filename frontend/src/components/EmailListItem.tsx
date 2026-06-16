@@ -1,4 +1,6 @@
 import { EmailItem } from "@/types";
+import { motion } from "motion/react";
+import { staggerItem } from "@/lib/motion";
 
 type Category = "IMPORTANT" | "ROUTINE" | "JUNK";
 
@@ -22,7 +24,8 @@ export default function EmailListItem({
 	onSelect,
 }: EmailListItemProps) {
 	return (
-		<button
+		<motion.button
+			variants={staggerItem}
 			onClick={onSelect}
 			className={`flex w-full flex-col items-start gap-0.5 border-l-2 ${BORDER_COLOR[category]} mb-1 px-3 py-2 text-left transition-colors ${
 				isSelected ? "bg-accent-soft" : "hover:bg-surface-hover"
@@ -38,6 +41,6 @@ export default function EmailListItem({
 			>
 				{email.subject}
 			</span>
-		</button>
+		</motion.button>
 	);
 }

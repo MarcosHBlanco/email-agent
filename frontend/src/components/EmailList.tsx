@@ -1,5 +1,7 @@
 import { Digest } from "@/types";
 import EmailListItem from "@/components/EmailListItem";
+import { motion } from "motion/react";
+import { staggerContainer } from "@/lib/motion";
 
 type CategoryFilter = "ALL" | "IMPORTANT" | "ROUTINE" | "JUNK";
 type Category = "IMPORTANT" | "ROUTINE" | "JUNK";
@@ -49,7 +51,11 @@ export default function EmailList({
 								Nothing here
 							</p>
 						) : (
-							<div>
+							<motion.div
+								variants={staggerContainer}
+								initial="hidden"
+								animate="visible"
+							>
 								{items.map((email) => (
 									<EmailListItem
 										key={email.gmail_id}
@@ -59,7 +65,7 @@ export default function EmailList({
 										onSelect={() => onSelectEmail(email.gmail_id)}
 									/>
 								))}
-							</div>
+							</motion.div>
 						)}
 					</section>
 				);
