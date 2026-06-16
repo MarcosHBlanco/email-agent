@@ -1,6 +1,6 @@
-import { EmailItem } from "@/types";
 import { motion } from "motion/react";
-import { staggerItem } from "@/lib/motion";
+import { EmailItem } from "@/types";
+import { staggerItem, springTransition } from "@/lib/motion";
 
 type Category = "IMPORTANT" | "ROUTINE" | "JUNK";
 
@@ -27,15 +27,25 @@ export default function EmailListItem({
 		<motion.button
 			variants={staggerItem}
 			onClick={onSelect}
-			className={`flex w-full flex-col items-start gap-0.5 border-l-2 ${BORDER_COLOR[category]} mb-1 px-3 py-2 text-left transition-colors ${
-				isSelected ? "bg-accent-soft" : "hover:bg-surface-hover"
+			className={`relative flex w-full flex-col items-start gap-0.5 border-l-2 ${BORDER_COLOR[category]} px-3 py-2 text-left ${
+				isSelected ? "" : "hover:bg-surface-hover"
 			}`}
 		>
-			<span className="w-full truncate text-xs text-ink-faint">
+			{/* Sliding selection highlight — shared layoutId animates it between rows */}
+			{isSelected && (
+				<motion.div
+					layoutId="selection-highlight"
+					transition={springTransition}
+					className="absolute inset-0 rounded-sm bg-accent-soft"
+					style={{ zIndex: 0 }}
+				/>
+			)}
+
+			<span className="relative z-10 w-full truncate text-xs text-ink-faint">
 				{email.sender}
 			</span>
 			<span
-				className={`w-full truncate text-sm ${
+				className={`relative z-10 w-full truncate text-sm ${
 					isSelected ? "font-semibold text-ink" : "text-ink-soft"
 				}`}
 			>
