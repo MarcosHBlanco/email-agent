@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Digest } from "@/types";
 import Rail from "@/components/Rail";
 import EmailList from "@/components/EmailList";
+import EmailDetail from "@/components/EmailDetail";
 
 const API_BASE = "http://localhost:8000";
 
@@ -72,18 +73,21 @@ export default function Home() {
 				processing={processing}
 			/>
 
-			<main className="flex-1 min-w-0 overflow-y-auto">
-				<div className="px-6 py-5">
+			{/* Column 2 — email list */}
+			<div className="flex w-80 shrink-0 flex-col border-r border-border overflow-hidden">
+				<div className="flex-1 overflow-y-auto">
 					{error && (
-						<p className="mb-4 rounded-md bg-important-soft px-3 py-2 text-sm text-important">
+						<p className="m-3 rounded-md bg-important-soft px-3 py-2 text-sm text-important">
 							{error}
 						</p>
 					)}
 					{loading && (
-						<p className="text-sm text-ink-soft">Loading latest digest…</p>
+						<p className="px-3 py-4 text-sm text-ink-soft">
+							Loading latest digest…
+						</p>
 					)}
 					{!loading && digest === null && (
-						<p className="text-sm text-ink-soft">
+						<p className="px-3 py-4 text-sm text-ink-soft">
 							No digest yet. Click &quot;Process new emails&quot; to create one.
 						</p>
 					)}
@@ -96,7 +100,18 @@ export default function Home() {
 						/>
 					)}
 				</div>
-			</main>
+			</div>
+
+			{/* Column 3 — detail panel */}
+			<div className="flex-1 min-w-0 overflow-hidden bg-surface">
+				{digest ? (
+					<EmailDetail digest={digest} selectedEmailId={selectedEmailId} />
+				) : (
+					<div className="flex h-full items-center justify-center">
+						<p className="text-sm text-ink-faint">No digest loaded</p>
+					</div>
+				)}
+			</div>
 		</div>
 	);
 }

@@ -20,3 +20,19 @@ export interface Digest {
 	generated_at: string;
 	buckets: DigestBuckets;
 }
+
+// Find an email by its gmail_id across all buckets. Returns the email and its
+// category (needed for the detail panel's color coding), or null if not found.
+export function findEmailById(
+	digest: Digest,
+	gmailId: string,
+): { email: EmailItem; category: keyof DigestBuckets } | null {
+	const categories: (keyof DigestBuckets)[] = ["IMPORTANT", "ROUTINE", "JUNK"];
+	for (const category of categories) {
+		const email = digest.buckets[category].find((e) => e.gmail_id === gmailId);
+		if (email) {
+			return { email, category };
+		}
+	}
+	return null;
+}
