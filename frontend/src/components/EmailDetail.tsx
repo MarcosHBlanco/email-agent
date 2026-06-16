@@ -1,4 +1,6 @@
-import { Digest, findEmailById } from "@/types";
+import { AnimatePresence, motion } from "motion/react";
+import { Digest, EmailItem, findEmailById } from "@/types";
+import { fadeInUp, transition } from "@/lib/motion";
 
 interface EmailDetailProps {
 	digest: Digest;
@@ -24,57 +26,83 @@ export default function EmailDetail({
 	digest,
 	selectedEmailId,
 }: EmailDetailProps) {
-	// Empty state: nothing selected -> show a small overview
-	if (selectedEmailId === null) {
-		return (
-			<div className="flex h-full flex-col items-center justify-center px-6 text-center">
-				<p className="text-sm text-ink-soft">
-					{digest.total} email{digest.total === 1 ? "" : "s"} in this digest
-				</p>
-				<div className="mt-3 flex gap-4 text-xs text-ink-faint">
-					<span>
-						<span className="font-semibold text-important">
-							{digest.buckets.IMPORTANT.length}
-						</span>{" "}
-						important
-					</span>
-					<span>
-						<span className="font-semibold text-routine">
-							{digest.buckets.ROUTINE.length}
-						</span>{" "}
-						routine
-					</span>
-					<span>
-						<span className="font-semibold text-junk">
-							{digest.buckets.JUNK.length}
-						</span>{" "}
-						junk
-					</span>
-				</div>
-				<p className="mt-6 text-xs text-ink-faint">
-					Select an email to read it
-				</p>
-			</div>
-		);
-	}
+	const found =
+		selectedEmailId !== null ? findEmailById(digest, selectedEmailId) : null;
 
-	const found = findEmailById(digest, selectedEmailId);
-
-	// Edge case: selected id no longer exists in the digest
-	if (found === null) {
-		return (
-			<div className="flex h-full items-center justify-center px-6">
-				<p className="text-sm text-ink-faint">Email not found</p>
-			</div>
-		);
-	}
-
-	const { email, category } = found;
-	const style = CATEGORY_STYLE[category];
+	const viewKey = selectedEmailId ?? "empty";
 
 	return (
+		<AnimatePresence mode="wait">
+			<motion.div
+				key={viewKey}
+				variants={fadeInUp}
+				initial="hidden"
+				animate="visible"
+				exit="hidden"
+				transition={transition}
+				className="h-full"
+			>
+				{selectedEmailId === null ? (
+					<EmptyState digest={digest} />
+				) : found === null ? (
+					<NotFoundState />
+				) : (
+					<EmailContent email={found.email} category={found.category} />
+				)}
+			</motion.div>
+		</AnimatePresence>
+	);
+}
+
+function EmptyState({ digest }: { digest: Digest }) {
+	return (
+		<div className="flex h-full flex-col items-center justify-center px-6 text-center">
+			<p className="text-sm text-ink-soft">
+				{digest.total} email{digest.total === 1 ? "" : "s"} in this digest
+			</p>
+			<div className="mt-3 flex gap-4 text-xs text-ink-faint">
+				<span>
+					<span className="font-semibold text-important">
+						{digest.buckets.IMPORTANT.length}
+					</span>{" "}
+					important
+				</span>
+				<span>
+					<span className="font-semibold text-routine">
+						{digest.buckets.ROUTINE.length}
+					</span>{" "}
+					routine
+				</span>
+				<span>
+					<span className="font-semibold text-junk">
+						{digest.buckets.JUNK.length}
+					</span>{" "}
+					junk
+				</span>
+			</div>
+			<p className="mt-6 text-xs text-ink-faint">Select an email to read it</p>
+		</div>
+	);
+}
+
+function NotFoundState() {
+	return (
+		<div className="flex h-full items-center justify-center px-6">
+			<p className="text-sm text-ink-faint">Email not found</p>
+		</div>
+	);
+}
+
+function EmailContent({
+	email,
+	category,
+}: {
+	email: EmailItem;
+	category: Category;
+}) {
+	const style = CATEGORY_STYLE[category];
+	return (
 		<div className="flex h-full flex-col">
-			{/* Header */}
 			<div className="border-b border-border px-6 py-4">
 				<span
 					className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${style.bg} ${style.text}`}
@@ -87,7 +115,6 @@ export default function EmailDetail({
 				<p className="mt-1 text-sm text-ink-soft">{email.sender}</p>
 			</div>
 
-			{/* Body */}
 			<div className="flex-1 overflow-y-auto px-6 py-5">
 				<section className="mb-6">
 					<h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-faint">
@@ -95,7 +122,6 @@ export default function EmailDetail({
 					</h3>
 					<p className="text-sm leading-relaxed text-ink">{email.summary}</p>
 				</section>
-
 				<section>
 					<h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-faint">
 						Why this category
@@ -106,7 +132,6 @@ export default function EmailDetail({
 				</section>
 			</div>
 
-			{/* Action area (placeholder — real actions come with Gmail write access) */}
 			<div className="border-t border-border px-6 py-3">
 				<div className="flex gap-2">
 					<button
