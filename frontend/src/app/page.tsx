@@ -105,7 +105,11 @@ export default function Home() {
 			{/* Column 3 — detail panel */}
 			<div className="flex-1 min-w-0 overflow-hidden bg-surface">
 				{digest ? (
-					<EmailDetail digest={digest} selectedEmailId={selectedEmailId} />
+					<EmailDetail
+						digest={digest}
+						selectedEmailId={selectedEmailId}
+						processing={processing}
+					/>
 				) : (
 					<div className="flex h-full items-center justify-center">
 						<p className="text-sm text-ink-faint">No digest loaded</p>
