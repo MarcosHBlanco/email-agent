@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Digest } from "@/types";
+import { motion } from "motion/react";
 
 type CategoryFilter = "ALL" | "IMPORTANT" | "ROUTINE" | "JUNK";
 
@@ -45,7 +46,7 @@ export default function Rail({
 				{/* DIGEST (expandable) */}
 				<button
 					onClick={() => setDigestOpen((o) => !o)}
-					className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-ink hover:bg-surface-hover"
+					className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-ink transition-colors hover:bg-surface-hover"
 				>
 					<span
 						className={`text-ink-faint transition-transform ${digestOpen ? "rotate-90" : ""}`}
@@ -109,13 +110,14 @@ export default function Rail({
 
 			{/* Process button (bottom) */}
 			<div className="border-t border-border p-3">
-				<button
+				<motion.button
 					onClick={onProcess}
 					disabled={processing}
+					whileTap={{ scale: 0.97 }}
 					className="w-full rounded-md bg-accent px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
 				>
 					{processing ? "Processing…" : "Process new emails"}
-				</button>
+				</motion.button>
 			</div>
 		</nav>
 	);

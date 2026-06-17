@@ -27,7 +27,7 @@ export default function EmailListItem({
 		<motion.button
 			variants={staggerItem}
 			onClick={onSelect}
-			className={`relative flex w-full flex-col items-start gap-0.5 border-l-2 ${BORDER_COLOR[category]} px-3 py-2 text-left ${
+			className={`relative flex w-full flex-col items-start gap-0.5 border-l-2 ${BORDER_COLOR[category]} px-3 py-2 text-left transition-colors ${
 				isSelected ? "" : "hover:bg-surface-hover"
 			}`}
 		>
