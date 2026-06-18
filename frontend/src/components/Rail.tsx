@@ -35,7 +35,7 @@ export default function Rail({
 	}
 
 	return (
-		<nav className="flex h-screen w-60 shrink-0 flex-col border-r border-border bg-canvas">
+		<nav className="flex h-screen w-full flex-col border-r border-border bg-canvas md:w-60 md:shrink-0">
 			{/* App title */}
 			<div className="px-4 py-3.5 border-b border-border">
 				<h1 className="text-sm font-semibold text-ink">Email Agent</h1>
