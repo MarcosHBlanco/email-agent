@@ -18,6 +18,8 @@ const CATEGORY_LABEL: Record<CategoryFilter, string> = {
 	JUNK: "Junk",
 };
 
+const VIEW_ORDER: MobileView[] = ["categories", "list", "detail"];
+
 export default function Home() {
 	const [digest, setDigest] = useState<Digest | null>(null);
 	const [loading, setLoading] = useState(true);
@@ -64,7 +66,6 @@ export default function Home() {
 		};
 	}, []);
 
-	// Drill-forward handlers — also advance the mobile view level.
 	function handleSelectCategory(category: CategoryFilter) {
 		setSelected(category);
 		setSelectedEmailId(null);
@@ -76,11 +77,20 @@ export default function Home() {
 		setMobileView("detail");
 	}
 
+	// Mobile slide: each panel's horizontal offset class based on position vs active view.
+	function mobileOffset(panel: MobileView): string {
+		const panelIndex = VIEW_ORDER.indexOf(panel);
+		const activeIndex = VIEW_ORDER.indexOf(mobileView);
+		if (panelIndex < activeIndex) return "-translate-x-full";
+		if (panelIndex > activeIndex) return "translate-x-full";
+		return "translate-x-0";
+	}
+
 	return (
-		<div className="flex h-screen flex-col overflow-hidden bg-canvas text-ink md:flex-row">
-			{/* Column 1 — Rail. Mobile: shown only at "categories" level. Desktop: always. */}
+		<div className="relative h-screen overflow-hidden bg-canvas text-ink md:flex md:flex-row">
+			{/* Column 1 — Rail */}
 			<div
-				className={`${mobileView === "categories" ? "flex" : "hidden"} h-full w-full flex-col md:flex md:w-60 md:shrink-0`}
+				className={`absolute inset-0 flex h-full w-full flex-col transition-transform duration-300 ease-out ${mobileOffset("categories")} md:static md:w-60 md:shrink-0 md:translate-x-0 md:transition-none`}
 			>
 				<Rail
 					digest={digest}
@@ -91,9 +101,9 @@ export default function Home() {
 				/>
 			</div>
 
-			{/* Column 2 — email list. Mobile: shown only at "list" level. Desktop: always. */}
+			{/* Column 2 — email list */}
 			<div
-				className={`${mobileView === "list" ? "flex" : "hidden"} h-full w-full flex-col border-r border-border md:flex md:w-80 md:shrink-0`}
+				className={`absolute inset-0 flex h-full w-full flex-col border-r border-border transition-transform duration-300 ease-out ${mobileOffset("list")} md:static md:w-80 md:shrink-0 md:translate-x-0 md:transition-none`}
 			>
 				{/* Mobile-only header with back button */}
 				<div className="flex items-center gap-2 border-b border-border px-3 py-3 md:hidden">
@@ -135,9 +145,9 @@ export default function Home() {
 				</div>
 			</div>
 
-			{/* Column 3 — detail. Mobile: shown only at "detail" level. Desktop: always. */}
+			{/* Column 3 — detail */}
 			<div
-				className={`${mobileView === "detail" ? "flex" : "hidden"} h-full w-full flex-col overflow-hidden bg-surface md:flex md:flex-1 md:min-w-0`}
+				className={`absolute inset-0 flex h-full w-full flex-col overflow-hidden bg-surface transition-transform duration-300 ease-out ${mobileOffset("detail")} md:static md:flex-1 md:min-w-0 md:translate-x-0 md:transition-none`}
 			>
 				{/* Mobile-only header with back button */}
 				<div className="flex items-center gap-2 border-b border-border px-3 py-3 md:hidden">
