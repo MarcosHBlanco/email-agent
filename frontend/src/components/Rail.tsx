@@ -3,6 +3,7 @@ import { Digest } from "@/types";
 import { motion } from "motion/react";
 
 type CategoryFilter = "ALL" | "IMPORTANT" | "ROUTINE" | "JUNK";
+type AppMode = "digest" | "calendar" | "chart";
 
 interface RailProps {
 	digest: Digest | null;
@@ -10,6 +11,8 @@ interface RailProps {
 	onSelect: (category: CategoryFilter) => void;
 	onProcess: () => void;
 	processing: boolean;
+	activeMode: AppMode;
+	onModeChange: (mode: AppMode) => void;
 }
 
 const CATEGORIES: { key: CategoryFilter; label: string; dot: string }[] = [
@@ -25,6 +28,8 @@ export default function Rail({
 	onSelect,
 	onProcess,
 	processing,
+	activeMode,
+	onModeChange,
 }: RailProps) {
 	const [digestOpen, setDigestOpen] = useState(true);
 
@@ -33,6 +38,8 @@ export default function Rail({
 		if (key === "ALL") return digest.total;
 		return digest.buckets[key].length;
 	}
+
+	const digestActive = activeMode === "digest";
 
 	return (
 		<nav className="flex h-screen w-full flex-col border-r border-border bg-canvas md:w-60 md:shrink-0">
@@ -43,20 +50,28 @@ export default function Rail({
 
 			{/* Nav sections */}
 			<div className="flex-1 overflow-y-auto px-2 py-3">
-				{/* DIGEST (expandable) */}
+				{/* DIGEST — mode switcher + expandable categories */}
 				<button
-					onClick={() => setDigestOpen((o) => !o)}
-					className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-ink transition-colors hover:bg-surface-hover"
+					onClick={() => {
+						onModeChange("digest");
+						setDigestOpen(true);
+					}}
+					className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium transition-colors ${
+						digestActive
+							? "bg-surface text-ink shadow-sm"
+							: "text-ink-soft hover:bg-surface-hover hover:text-ink"
+					}`}
 				>
 					<span
-						className={`text-ink-faint transition-transform ${digestOpen ? "rotate-90" : ""}`}
+						className={`text-ink-faint transition-transform ${digestActive && digestOpen ? "rotate-90" : ""}`}
 					>
 						▸
 					</span>
 					Digest
 				</button>
 
-				{digestOpen && (
+				{/* Categories — only in digest mode */}
+				{digestActive && digestOpen && (
 					<ul className="mt-0.5 space-y-0.5 pl-2">
 						{CATEGORIES.map(({ key, label, dot }) => {
 							const isActive = selected === key;
@@ -89,23 +104,31 @@ export default function Rail({
 					</ul>
 				)}
 
-				{/* CALENDAR (coming soon) */}
-				<div className="mt-1 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-ink-faint cursor-not-allowed">
-					<span>▸</span>
+				{/* CALENDAR — mode switcher */}
+				<button
+					onClick={() => onModeChange("calendar")}
+					className={`mt-1 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium transition-colors ${
+						activeMode === "calendar"
+							? "bg-surface text-ink shadow-sm"
+							: "text-ink-soft hover:bg-surface-hover hover:text-ink"
+					}`}
+				>
+					<span className="text-ink-faint">▸</span>
 					Calendar
-					<span className="ml-auto rounded bg-junk-soft px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-ink-faint">
-						Soon
-					</span>
-				</div>
+				</button>
 
-				{/* CHART (coming soon) */}
-				<div className="mt-0.5 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-ink-faint cursor-not-allowed">
-					<span>▸</span>
+				{/* CHART — mode switcher */}
+				<button
+					onClick={() => onModeChange("chart")}
+					className={`mt-0.5 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium transition-colors ${
+						activeMode === "chart"
+							? "bg-surface text-ink shadow-sm"
+							: "text-ink-soft hover:bg-surface-hover hover:text-ink"
+					}`}
+				>
+					<span className="text-ink-faint">▸</span>
 					Chart
-					<span className="ml-auto rounded bg-junk-soft px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-ink-faint">
-						Soon
-					</span>
-				</div>
+				</button>
 			</div>
 
 			{/* Process button (bottom) */}

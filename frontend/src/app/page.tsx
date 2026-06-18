@@ -10,6 +10,7 @@ const API_BASE = "http://localhost:8000";
 
 type CategoryFilter = "ALL" | "IMPORTANT" | "ROUTINE" | "JUNK";
 type MobileView = "categories" | "list" | "detail";
+type AppMode = "digest" | "calendar" | "chart";
 
 const CATEGORY_LABEL: Record<CategoryFilter, string> = {
 	ALL: "All",
@@ -28,6 +29,7 @@ export default function Home() {
 	const [selected, setSelected] = useState<CategoryFilter>("ALL");
 	const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
 	const [mobileView, setMobileView] = useState<MobileView>("categories");
+	const [activeMode, setActiveMode] = useState<AppMode>("digest");
 
 	async function processNewEmails() {
 		setProcessing(true);
@@ -98,81 +100,122 @@ export default function Home() {
 					onSelect={handleSelectCategory}
 					onProcess={processNewEmails}
 					processing={processing}
+					activeMode={activeMode}
+					onModeChange={setActiveMode}
 				/>
 			</div>
 
-			{/* Column 2 — email list */}
-			<div
-				className={`absolute inset-0 flex h-full w-full flex-col border-r border-border transition-transform duration-300 ease-out ${mobileOffset("list")} md:static md:w-80 md:shrink-0 md:translate-x-0 md:transition-none`}
-			>
-				{/* Mobile-only header with back button */}
-				<div className="flex items-center gap-2 border-b border-border px-3 py-3 md:hidden">
-					<button
-						onClick={() => setMobileView("categories")}
-						className="text-sm text-accent"
+			{/* DIGEST MODE — list + detail panels */}
+			{activeMode === "digest" && (
+				<>
+					{/* Column 2 — email list */}
+					<div
+						className={`absolute inset-0 flex h-full w-full flex-col border-r border-border transition-transform duration-300 ease-out ${mobileOffset("list")} md:static md:w-80 md:shrink-0 md:translate-x-0 md:transition-none`}
 					>
-						‹ Categories
-					</button>
-					<span className="ml-auto text-sm font-medium text-ink">
-						{CATEGORY_LABEL[selected]}
-					</span>
-				</div>
-
-				<div className="flex-1 overflow-y-auto">
-					{error && (
-						<p className="m-3 rounded-md bg-important-soft px-3 py-2 text-sm text-important">
-							{error}
-						</p>
-					)}
-					{loading && (
-						<p className="px-3 py-4 text-sm text-ink-soft">
-							Loading latest digest…
-						</p>
-					)}
-					{!loading && digest === null && (
-						<p className="px-3 py-4 text-sm text-ink-soft">
-							No digest yet. Click &quot;Process new emails&quot; to create one.
-						</p>
-					)}
-					{!loading && digest && (
-						<EmailList
-							digest={digest}
-							selected={selected}
-							selectedEmailId={selectedEmailId}
-							onSelectEmail={handleSelectEmail}
-						/>
-					)}
-				</div>
-			</div>
-
-			{/* Column 3 — detail */}
-			<div
-				className={`absolute inset-0 flex h-full w-full flex-col overflow-hidden bg-surface transition-transform duration-300 ease-out ${mobileOffset("detail")} md:static md:flex-1 md:min-w-0 md:translate-x-0 md:transition-none`}
-			>
-				{/* Mobile-only header with back button */}
-				<div className="flex items-center gap-2 border-b border-border px-3 py-3 md:hidden">
-					<button
-						onClick={() => setMobileView("list")}
-						className="text-sm text-accent"
-					>
-						‹ {CATEGORY_LABEL[selected]}
-					</button>
-				</div>
-
-				<div className="flex-1 overflow-hidden">
-					{digest ? (
-						<EmailDetail
-							digest={digest}
-							selectedEmailId={selectedEmailId}
-							processing={processing}
-						/>
-					) : (
-						<div className="flex h-full items-center justify-center">
-							<p className="text-sm text-ink-faint">No digest loaded</p>
+						{/* Mobile-only header with back button */}
+						<div className="flex items-center gap-2 border-b border-border px-3 py-3 md:hidden">
+							<button
+								onClick={() => setMobileView("categories")}
+								className="text-sm text-accent"
+							>
+								‹ Categories
+							</button>
+							<span className="ml-auto text-sm font-medium text-ink">
+								{CATEGORY_LABEL[selected]}
+							</span>
 						</div>
-					)}
+						<div className="flex-1 overflow-y-auto">
+							{error && (
+								<p className="m-3 rounded-md bg-important-soft px-3 py-2 text-sm text-important">
+									{error}
+								</p>
+							)}
+							{loading && (
+								<p className="px-3 py-4 text-sm text-ink-soft">
+									Loading latest digest…
+								</p>
+							)}
+							{!loading && digest === null && (
+								<p className="px-3 py-4 text-sm text-ink-soft">
+									No digest yet. Click &quot;Process new emails&quot; to create
+									one.
+								</p>
+							)}
+							{!loading && digest && (
+								<EmailList
+									digest={digest}
+									selected={selected}
+									selectedEmailId={selectedEmailId}
+									onSelectEmail={handleSelectEmail}
+								/>
+							)}
+						</div>
+					</div>
+
+					{/* Column 3 — detail */}
+					<div
+						className={`absolute inset-0 flex h-full w-full flex-col overflow-hidden bg-surface transition-transform duration-300 ease-out ${mobileOffset("detail")} md:static md:flex-1 md:min-w-0 md:translate-x-0 md:transition-none`}
+					>
+						<div className="flex items-center gap-2 border-b border-border px-3 py-3 md:hidden">
+							<button
+								onClick={() => setMobileView("list")}
+								className="text-sm text-accent"
+							>
+								‹ {CATEGORY_LABEL[selected]}
+							</button>
+						</div>
+						<div className="flex-1 overflow-hidden">
+							{digest ? (
+								<EmailDetail
+									digest={digest}
+									selectedEmailId={selectedEmailId}
+									processing={processing}
+								/>
+							) : (
+								<div className="flex h-full items-center justify-center">
+									<p className="text-sm text-ink-faint">No digest loaded</p>
+								</div>
+							)}
+						</div>
+					</div>
+				</>
+			)}
+
+			{/* CALENDAR MODE */}
+			{activeMode === "calendar" && (
+				<div className="absolute inset-0 flex h-full w-full flex-col bg-surface md:static md:flex-1">
+					<div className="flex items-center gap-2 border-b border-border px-3 py-3 md:hidden">
+						<button
+							onClick={() => setActiveMode("digest")}
+							className="text-sm text-accent"
+						>
+							‹ Menu
+						</button>
+					</div>
+					<div className="flex flex-1 items-center justify-center">
+						<p className="text-sm text-ink-faint">
+							Calendar view — coming next
+						</p>
+					</div>
 				</div>
-			</div>
+			)}
+
+			{/* CHART MODE */}
+			{activeMode === "chart" && (
+				<div className="absolute inset-0 flex h-full w-full flex-col bg-surface md:static md:flex-1">
+					<div className="flex items-center gap-2 border-b border-border px-3 py-3 md:hidden">
+						<button
+							onClick={() => setActiveMode("digest")}
+							className="text-sm text-accent"
+						>
+							‹ Menu
+						</button>
+					</div>
+					<div className="flex flex-1 items-center justify-center">
+						<p className="text-sm text-ink-faint">Chart view — coming next</p>
+					</div>
+				</div>
+			)}
 		</div>
 	);
 }
