@@ -124,3 +124,43 @@ def get_latest_digest() -> dict | None:
         if row is None:
             return None
         return json.loads(row["digest_json"])
+
+
+def get_daily_analytics() -> list[dict]:
+    """Aggregate categorizations by calendar day and category.
+
+    Returns one entry per day that had activity, with distinct-email counts
+    per category. Distinct because the same email re-categorized in multiple
+    runs on the same day should count once, otherwise it inflates the numbers.
+
+    Shape: [{"date": "2026-06-09", "IMPORTANT": 3, "ROUTINE": 1,
+             "JUNK": 8, "total": 12}, ...] ordered oldest to newest.
+    """
+    with get_connection() as conn:
+        rows = conn.execute("""
+            SELECT
+                date(r.run_at) AS day,
+                ec.category AS category,
+                COUNT(DISTINCT ec.gmail_id) AS count
+            FROM email_categorizations ec
+            JOIN runs r ON ec.run_id = r.id
+            GROUP BY day, ec.category
+            ORDER BY day ASC
+            """).fetchall()
+
+    # Reshape flat (day, category, count) rows into one dict per day.
+    by_day: dict[str, dict] = {}
+    for row in rows:
+        day = row["day"]
+        if day not in by_day:
+            by_day[day] = {
+                "date": day,
+                "IMPORTANT": 0,
+                "ROUTINE": 0,
+                "JUNK": 0,
+                "total": 0,
+            }
+        by_day[day][row["category"]] = row["count"]
+        by_day[day]["total"] += row["count"]
+
+    return list(by_day.values())

@@ -54,3 +54,14 @@ def process_digest() -> dict:
     """
     digest = run_digest()
     return {"digest": digest}
+
+
+@app.get("/analytics/daily")
+def get_daily_analytics() -> dict:
+    """READ path: per-day category counts across all history.
+
+    Feeds both the calendar grid and the trend charts. Fast — just a
+    database aggregation, no Claude calls.
+    """
+    data = db.get_daily_analytics()
+    return {"analytics": data}
