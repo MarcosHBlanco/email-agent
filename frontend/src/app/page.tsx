@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Digest } from "@/types";
+import { Digest, DailyAnalytics } from "@/types";
 import Rail from "@/components/Rail";
 import EmailList from "@/components/EmailList";
 import EmailDetail from "@/components/EmailDetail";
+import Calendar from "@/components/Calendar";
 
 const API_BASE = "http://localhost:8000";
 
@@ -30,6 +31,7 @@ export default function Home() {
 	const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
 	const [mobileView, setMobileView] = useState<MobileView>("categories");
 	const [activeMode, setActiveMode] = useState<AppMode>("digest");
+	const [analytics, setAnalytics] = useState<DailyAnalytics[]>([]);
 
 	async function processNewEmails() {
 		setProcessing(true);
@@ -63,6 +65,24 @@ export default function Home() {
 			}
 		}
 		loadOnMount();
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+
+	useEffect(() => {
+		let cancelled = false;
+		async function loadAnalytics() {
+			try {
+				const res = await fetch(`${API_BASE}/analytics/daily`);
+				if (!res.ok) return; //non-critical; fail silently;
+				const data = await res.json();
+				if (!cancelled) setAnalytics(data.analytics ?? []);
+			} catch {
+				// leave empty - non-critical
+			}
+		}
+		loadAnalytics();
 		return () => {
 			cancelled = true;
 		};
@@ -193,9 +213,11 @@ export default function Home() {
 						</button>
 					</div>
 					<div className="flex flex-1 items-center justify-center">
-						<p className="text-sm text-ink-faint">
-							Calendar view — coming next
-						</p>
+						<Calendar
+							analytics={analytics}
+							year={new Date().getFullYear()}
+							month={new Date().getMonth()}
+						/>
 					</div>
 				</div>
 			)}

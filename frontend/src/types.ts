@@ -21,6 +21,14 @@ export interface Digest {
 	buckets: DigestBuckets;
 }
 
+export interface DailyAnalytics {
+	date: string;
+	IMPORTANT: number;
+	ROUTINE: number;
+	JUNK: number;
+	total: number;
+}
+
 // Find an email by its gmail_id across all buckets. Returns the email and its
 // category (needed for the detail panel's color coding), or null if not found.
 export function findEmailById(
