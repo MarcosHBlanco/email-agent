@@ -1,43 +1,97 @@
 @import "tailwindcss";
 
-@theme {
-	/* ===== NEUTRALS (the foundation — ~85% of the UI) ===== */
-	/* Warm off-whites and grays, Superhuman-style (not harsh pure white/black) */
-	--color-canvas: #faf9fb; /* app background (warm near-white) */
-	--color-surface: #ffffff; /* cards, panels */
-	--color-surface-hover: #f4f3f6; /* hover state on rows */
-	--color-border: #e6e4ea; /* subtle borders */
-	--color-border-strong: #d4d1db; /* stronger dividers */
+/* Tell Tailwind to treat .dark on an ancestor as the dark variant trigger */
+@custom-variant dark (&:where(.dark, .dark *));
 
-	/* Text shades (dark -> light) */
-	--color-ink: #1c1b22; /* primary text (near-black, warm) */
-	--color-ink-soft: #56535f; /* secondary text */
-	--color-ink-faint: #8b8794; /* tertiary / metadata */
+/* ===== LIGHT THEME (default) ===== */
+:root {
+	--color-canvas: #faf9fb;
+	--color-surface: #ffffff;
+	--color-surface-hover: #f4f3f6;
+	--color-border: #e6e4ea;
+	--color-border-strong: #d4d1db;
 
-	/* ===== PRIMARY ACCENT (Superhuman violet) ===== */
-	--color-accent: #605eca; /* buttons, active states, links */
-	--color-accent-hover: #514fb8; /* darker for hover */
-	--color-accent-soft: #ecebfa; /* light violet tint for backgrounds */
+	--color-ink: #1c1b22;
+	--color-ink-soft: #56535f;
+	--color-ink-faint: #8b8794;
 
-	/* ===== CATEGORY COLORS ===== */
-	/* IMPORTANT — wine red (attention) */
-	--color-important: #741523;
-	--color-important-soft: #f7e9eb; /* tinted background */
+	--color-accent: #635efc;
+	--color-accent-hover: #514fb8;
+	--color-accent-soft: #ecebfa;
 
-	/* ROUTINE — slate blue (calm) */
-	--color-routine: #5c79b2;
-	--color-routine-soft: #eaef4;
+	--color-important: #c4365a;
+	--color-important-soft: #fbe9ee;
 
-	/* JUNK — neutral gray (de-emphasized) */
+	--color-routine: #4a72c4;
+	--color-routine-soft: #e9f0fb;
+
 	--color-junk: #8b8794;
 	--color-junk-soft: #f1f0f3;
 
-	/* ===== SUPPORTING ACCENTS (charts / secondary, used later) ===== */
-	--color-support-1: #777fc5;
-	--color-support-2: #79a0db;
-	--color-support-3: #7b391d;
+	--color-support-1: #a06bfb;
+	--color-support-2: #f470a5;
+	--color-support-3: #635efc;
+}
 
-	/* ===== TYPOGRAPHY ===== */
+/* ===== DARK THEME (when .dark is on <html>) ===== */
+.dark {
+	--color-canvas: #100e17; /* purple-tinted near-black */
+	--color-surface: #1a1722; /* lifted dark surface */
+	--color-surface-hover: #221d2e; /* hover, slightly lighter */
+	--color-border: #2a2536; /* subtle borders on dark */
+	--color-border-strong: #3a3447;
+
+	--color-ink: #ece9f1; /* primary text (near-white, warm) */
+	--color-ink-soft: #a7a1b4; /* secondary */
+	--color-ink-faint: #6e6880; /* tertiary / metadata */
+
+	--color-accent: #7c78ff; /* brightened indigo — glows on dark */
+	--color-accent-hover: #938ffe;
+	--color-accent-soft: #211d3a; /* dark violet tint for selection bg */
+
+	--color-important: #f470a5; /* your pink — warm, attention */
+	--color-important-soft: #2e1a26; /* dark rose tint */
+
+	--color-routine: #6f97e3; /* brighter blue for dark */
+	--color-routine-soft: #18223a;
+
+	--color-junk: #6e6880; /* muted gray */
+	--color-junk-soft: #201d29;
+
+	--color-support-1: #a06bfb;
+	--color-support-2: #f470a5;
+	--color-support-3: #7c78ff;
+}
+
+/* Expose the CSS variables to Tailwind as theme colors */
+@theme inline {
+	--color-canvas: var(--color-canvas);
+	--color-surface: var(--color-surface);
+	--color-surface-hover: var(--color-surface-hover);
+	--color-border: var(--color-border);
+	--color-border-strong: var(--color-border-strong);
+
+	--color-ink: var(--color-ink);
+	--color-ink-soft: var(--color-ink-soft);
+	--color-ink-faint: var(--color-ink-faint);
+
+	--color-accent: var(--color-accent);
+	--color-accent-hover: var(--color-accent-hover);
+	--color-accent-soft: var(--color-accent-soft);
+
+	--color-important: var(--color-important);
+	--color-important-soft: var(--color-important-soft);
+
+	--color-routine: var(--color-routine);
+	--color-routine-soft: var(--color-routine-soft);
+
+	--color-junk: var(--color-junk);
+	--color-junk-soft: var(--color-junk-soft);
+
+	--color-support-1: var(--color-support-1);
+	--color-support-2: var(--color-support-2);
+	--color-support-3: var(--color-support-3);
+
 	--font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
