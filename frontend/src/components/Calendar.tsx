@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { DailyAnalytics } from "@/types";
+import DayModal from "@/components/DayModal";
 
 interface CalendarProps {
 	analytics: DailyAnalytics[];
@@ -24,6 +26,8 @@ const MONTH_NAMES = [
 
 export default function Calendar({ analytics, year, month }: CalendarProps) {
 	const byDate = new Map(analytics.map((d) => [d.date, d]));
+
+	const [selectedDay, setSelectedDay] = useState<DailyAnalytics | null>(null);
 
 	const firstDay = new Date(year, month, 1);
 	const startWeekday = firstDay.getDay();
@@ -95,14 +99,17 @@ export default function Calendar({ analytics, year, month }: CalendarProps) {
 						const isToday = isCurrentMonth && day === todayDate;
 
 						return (
-							<div
+							<button
 								key={day}
-								className={`flex aspect-square flex-col rounded-lg border p-2 transition-colors ${
+								onClick={() => {
+									if (data) setSelectedDay(data);
+								}}
+								className={`flex aspect-square flex-col rounded-lg border p-2 text-left transition-colors md:!cursor-default ${
 									isToday
 										? "border-accent bg-accent-soft"
 										: hasData
 											? "border-border bg-surface shadow-sm hover:bg-surface-hover"
-											: "border-transparent bg-canvas"
+											: "border-border bg-canvas"
 								}`}
 							>
 								{/* Day number */}
@@ -122,7 +129,7 @@ export default function Calendar({ analytics, year, month }: CalendarProps) {
 									<div className="mt-auto flex flex-col gap-1.5">
 										{/* Important callout — the headline */}
 										{data.IMPORTANT > 0 && (
-											<div className="flex items-baseline gap-1">
+											<div className="hidden  items-baseline gap-1 md:flex">
 												<span className="text-lg font-semibold tabular-nums text-important leading-none">
 													{data.IMPORTANT}
 												</span>
@@ -134,7 +141,7 @@ export default function Calendar({ analytics, year, month }: CalendarProps) {
 
 										{/* Total + composition bar */}
 										<div className="flex flex-col gap-1">
-											<span className="text-[11px] tabular-nums text-ink-soft">
+											<span className="hidden text-[11px] tabular-nums text-ink-soft md:block">
 												{data.total} total
 											</span>
 											<div className="flex h-1.5 overflow-hidden rounded-full bg-canvas">
@@ -160,10 +167,11 @@ export default function Calendar({ analytics, year, month }: CalendarProps) {
 										</div>
 									</div>
 								)}
-							</div>
+							</button>
 						);
 					})}
 				</div>
+				<DayModal day={selectedDay} onClose={() => setSelectedDay(null)} />
 			</div>
 		</div>
 	);
