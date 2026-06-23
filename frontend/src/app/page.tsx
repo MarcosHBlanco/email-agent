@@ -210,42 +210,52 @@ export default function Home() {
 				)}
 
 				{/* CALENDAR MODE */}
-				{activeMode === "calendar" && (
-					<div className="absolute inset-0 flex h-full w-full flex-col bg-surface md:static md:flex-1">
-						<div className="flex items-center gap-2 border-b border-border px-3 py-3 md:hidden">
-							<button
-								onClick={() => setActiveMode("digest")}
-								className="text-sm text-accent"
-							>
-								‹ Menu
-							</button>
-						</div>
-						<div className="flex-1 overflow-y-auto">
-							<Calendar
-								analytics={analytics}
-								year={new Date().getFullYear()}
-								month={new Date().getMonth()}
-							/>
-						</div>
+				<div
+					className={`absolute inset-0 z-10 flex h-full w-full flex-col bg-surface transition-transform duration-300 ease-out ${
+						activeMode === "calendar" ? "translate-x-0" : "translate-x-full"
+					} md:z-0 md:translate-x-0 md:transition-none ${
+						activeMode === "calendar"
+							? "md:static md:flex md:flex-1"
+							: "md:hidden"
+					}`}
+				>
+					<div className="flex items-center gap-2 border-b border-border px-3 py-3 md:hidden">
+						<button
+							onClick={() => setActiveMode("digest")}
+							className="text-sm text-accent"
+						>
+							‹ Menu
+						</button>
 					</div>
-				)}
+					<div className="flex-1 overflow-y-auto">
+						<Calendar
+							analytics={analytics}
+							year={new Date().getFullYear()}
+							month={new Date().getMonth()}
+						/>
+					</div>
+				</div>
 
 				{/* CHART MODE */}
-				{activeMode === "chart" && (
-					<div className="absolute inset-0 flex h-full w-full flex-col bg-surface md:static md:flex-1">
-						<div className="flex items-center gap-2 border-b border-border px-3 py-3 md:hidden">
-							<button
-								onClick={() => setActiveMode("digest")}
-								className="text-sm text-accent"
-							>
-								‹ Menu
-							</button>
-						</div>
-						<div className="flex-1 overflow-y-auto">
-							<Charts analytics={analytics} />
-						</div>
+				<div
+					className={`absolute inset-0 z-10 flex h-full w-full flex-col bg-surface transition-transform duration-300 ease-out ${
+						activeMode === "chart" ? "translate-x-0" : "translate-x-full"
+					} md:z-0 md:translate-x-0 md:transition-none ${
+						activeMode === "chart" ? "md:static md:flex md:flex-1" : "md:hidden"
+					}`}
+				>
+					<div className="flex items-center gap-2 border-b border-border px-3 py-3 md:hidden">
+						<button
+							onClick={() => setActiveMode("digest")}
+							className="text-sm text-accent"
+						>
+							‹ Menu
+						</button>
 					</div>
-				)}
+					<div className="flex-1 overflow-y-auto">
+						<Charts analytics={analytics} />
+					</div>
+				</div>
 			</div>
 		</div>
 	);
