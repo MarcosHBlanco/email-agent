@@ -7,6 +7,7 @@ import EmailList from "@/components/EmailList";
 import EmailDetail from "@/components/EmailDetail";
 import Calendar from "@/components/Calendar";
 import Header from "@/components/Header";
+import Charts from "@/components/Charts";
 
 const API_BASE = "http://localhost:8000";
 
@@ -42,6 +43,7 @@ export default function Home() {
 			if (!res.ok) throw new Error(`Server responded with ${res.status}`);
 			const data = await res.json();
 			setDigest(data.digest);
+			await loadAnalytics(); //refresh calendar/chart data too
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Something went wrong");
 		} finally {
@@ -71,22 +73,19 @@ export default function Home() {
 		};
 	}, []);
 
-	useEffect(() => {
-		let cancelled = false;
-		async function loadAnalytics() {
-			try {
-				const res = await fetch(`${API_BASE}/analytics/daily`);
-				if (!res.ok) return; //non-critical; fail silently;
-				const data = await res.json();
-				if (!cancelled) setAnalytics(data.analytics ?? []);
-			} catch {
-				// leave empty - non-critical
-			}
+	async function loadAnalytics() {
+		try {
+			const res = await fetch(`${API_BASE}/analytics/daily`);
+			if (!res.ok) return; // non-critical; fail silently
+			const data = await res.json();
+			setAnalytics(data.analytics ?? []);
+		} catch {
+			// leave empty - non-critical
 		}
+	}
+
+	useEffect(() => {
 		loadAnalytics();
-		return () => {
-			cancelled = true;
-		};
 	}, []);
 
 	function handleSelectCategory(category: CategoryFilter) {
@@ -159,7 +158,12 @@ export default function Home() {
 										Loading latest digest…
 									</p>
 								)}
-								{!loading && digest === null && (
+								{!loading && processing && digest === null && (
+									<p className="px-3 py-4 text-sm text-ink-soft">
+										Processing your emails…
+									</p>
+								)}
+								{!loading && !processing && digest === null && (
 									<p className="px-3 py-4 text-sm text-ink-soft">
 										No digest yet. Click &quot;Process new emails&quot; to
 										create one.
@@ -237,8 +241,8 @@ export default function Home() {
 								‹ Menu
 							</button>
 						</div>
-						<div className="flex flex-1 items-center justify-center">
-							<p className="text-sm text-ink-faint">Chart view — coming next</p>
+						<div className="flex-1 overflow-y-auto">
+							<Charts analytics={analytics} />
 						</div>
 					</div>
 				)}

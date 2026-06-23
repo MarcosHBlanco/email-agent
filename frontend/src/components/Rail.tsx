@@ -42,7 +42,7 @@ export default function Rail({
 	const digestActive = activeMode === "digest";
 
 	return (
-		<nav className="flex h-screen w-full flex-col border-r border-border bg-canvas md:w-60 md:shrink-0">
+		<nav className="flex h-full w-full flex-col border-r border-border bg-canvas md:w-60 md:shrink-0">
 			{/* Nav sections */}
 			<div className="flex-1 overflow-y-auto px-2 py-3">
 				{/* DIGEST — mode switcher + expandable categories */}

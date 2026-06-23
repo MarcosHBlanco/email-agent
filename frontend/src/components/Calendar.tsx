@@ -104,7 +104,7 @@ export default function Calendar({ analytics, year, month }: CalendarProps) {
 								onClick={() => {
 									if (data) setSelectedDay(data);
 								}}
-								className={`flex aspect-square flex-col rounded-lg border p-2 text-left transition-colors md:!cursor-default ${
+								className={`flex aspect-square flex-col rounded-lg border p-2 text-left transition-colors md:cursor-default! ${
 									isToday
 										? "border-accent bg-accent-soft"
 										: hasData
