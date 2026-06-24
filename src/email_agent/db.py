@@ -60,6 +60,25 @@ def init_db() -> None:
             )
             """)
 
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """)
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS sessions (
+                id TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            )
+            """)
+
 
 def record_run(window_start: str, emails_processed: int) -> int:
     """Insert a row into runs and return its new id."""
@@ -164,3 +183,25 @@ def get_daily_analytics() -> list[dict]:
         by_day[day]["total"] += row["count"]
 
     return list(by_day.values())
+
+
+def create_user(email: str, password_hash: str) -> int:
+    """Insert a new user and return their id. Raises if email already exists."""
+    created_at = datetime.now(timezone.utc).isoformat()
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "INSERT INTO users (email, password_hash, created_at) VALUES (?, ?, ?)",
+            (email, password_hash, created_at),
+        )
+        assert cursor.lastrowid is not None
+        return cursor.lastrowid
+
+
+def get_user_by_email(email: str) -> dict | None:
+    """Find a user by email. Returns a dict with id, email, password_hash — or None."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT id, email, password_hash FROM users WHERE email = ?",
+            (email,),
+        ).fetchone()
+        return dict(row) if row else None

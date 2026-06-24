@@ -6,10 +6,11 @@ Exposes two distinct paths:
 
 """
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response, Cookie, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
-from email_agent import db
+from email_agent import db, auth
 from email_agent.summarizer import run_digest
 
 app = FastAPI(title="Email Agent")
@@ -65,3 +66,64 @@ def get_daily_analytics() -> dict:
     """
     data = db.get_daily_analytics()
     return {"analytics": data}
+
+
+# ===== Auth =====
+
+
+class AuthRequest(BaseModel):
+    email: str
+    password: str
+
+
+@app.post("/auth/signup")
+def signup(body: AuthRequest, response: Response) -> dict:
+    """Create a new user, log them in, and set their session cookie."""
+    # Email already used?
+    existing = db.get_user_by_email(body.email)
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="Email already registered")
+
+    # Hash the password and create the user.
+    password_hash = auth.hash_password(body.password)
+    user_id = db.create_user(body.email, password_hash)
+
+    # Log them in immediately: create a session and set it as a cookie.
+    token = auth.create_session(user_id)
+    response.set_cookie(
+        key="session",
+        value=token,
+        httponly=True,
+        samesite="lax",
+        max_age=60 * 60 * 24 * 30,  # 30 days in seconds
+    )
+    return {"id": user_id, "email": body.email}
+
+
+@app.post("/auth/login")
+def login(body: AuthRequest, response: Response) -> dict:
+    """Verify credentials, log the user in, and set their session cookie."""
+    user = db.get_user_by_email(body.email)
+
+    # Same error whether the email is unknown OR the password is wrong.
+    if user is None or not auth.verify_password(body.password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    token = auth.create_session(user["id"])
+    response.set_cookie(
+        key="session",
+        value=token,
+        httponly=True,
+        samesite="lax",
+        max_age=60 * 60 * 24 * 30,
+    )
+    return {"id": user["id"], "email": user["email"]}
+
+
+@app.post("/auth/logout")
+def logout(response: Response, session: str | None = Cookie(default=None)) -> dict:
+    """Log out: delete the session and clear the cookie."""
+    if session is not None:
+        auth.delete_session(session)
+    response.delete_cookie(key="session")
+    return {"ok": True}
