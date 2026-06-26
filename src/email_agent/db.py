@@ -205,3 +205,13 @@ def get_user_by_email(email: str) -> dict | None:
             (email,),
         ).fetchone()
         return dict(row) if row else None
+
+
+def get_user_by_id(user_id: int) -> dict | None:
+    """Find a user by id. Returns a dict with id, email — or None."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT id, email FROM users WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+        return dict(row) if row else None

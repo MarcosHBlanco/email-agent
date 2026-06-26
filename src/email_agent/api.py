@@ -6,7 +6,7 @@ Exposes two distinct paths:
 
 """
 
-from fastapi import FastAPI, Response, Cookie, HTTPException
+from fastapi import FastAPI, Response, Cookie, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -14,6 +14,29 @@ from email_agent import db, auth
 from email_agent.summarizer import run_digest
 
 app = FastAPI(title="Email Agent")
+
+
+def get_current_user(session: str | None = Cookie(default=None)) -> dict:
+    """Dependency: identify the logged-in user from their session cookie.
+
+    Runs before a protected endpoint. If the session is missing, invalid,
+    or expired, it rejects the request with 401 and the endpoint never runs.
+    Otherwise it returns the user dict, which the endpoint receives.
+    """
+    if session is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    user_id = auth.get_session_user(session)
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    user = db.get_user_by_id(user_id)
+    if user is None:
+        # Session pointed to a user that no longer exists — treat as unauthenticated.
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    return user
+
 
 # Allow the frontend (different origin/port) to call this API.
 app.add_middleware(
@@ -32,7 +55,7 @@ def read_root() -> dict:
 
 
 @app.get("/digest/latest")
-def get_latest_digest() -> dict:
+def get_latest_digest(user: dict = Depends(get_current_user)) -> dict:
     """READ path: return the most recent stored digest snapshot.
 
     Fast — just a database read, no Claude calls. Returns the stored digest,
@@ -48,7 +71,7 @@ def get_latest_digest() -> dict:
 
 
 @app.post("/digest/process")
-def process_digest() -> dict:
+def process_digest(user: dict = Depends(get_current_user)) -> dict:
     """WRITE path: run a new processing pass (fetch, categorize, store).
 
     Slow — calls Claude for each new email. Returns the freshly produced digest.
@@ -58,7 +81,7 @@ def process_digest() -> dict:
 
 
 @app.get("/analytics/daily")
-def get_daily_analytics() -> dict:
+def get_daily_analytics(user: dict = Depends(get_current_user)) -> dict:
     """READ path: per-day category counts across all history.
 
     Feeds both the calendar grid and the trend charts. Fast — just a
