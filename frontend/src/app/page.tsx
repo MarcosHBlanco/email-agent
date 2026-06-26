@@ -8,6 +8,8 @@ import EmailDetail from "@/components/EmailDetail";
 import Calendar from "@/components/Calendar";
 import Header from "@/components/Header";
 import Charts from "@/components/Charts";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/components/AuthProvider";
 
 const API_BASE = "http://localhost:8000";
 
@@ -35,11 +37,24 @@ export default function Home() {
 	const [activeMode, setActiveMode] = useState<AppMode>("digest");
 	const [analytics, setAnalytics] = useState<DailyAnalytics[]>([]);
 
+	const { user, loading: authLoading } = useAuth();
+	const router = useRouter();
+
+	//Redirect to login if not authenticated (once the auth check finishes).
+	useEffect(() => {
+		if (!authLoading && user === null) {
+			router.push("/login");
+		}
+	}, [authLoading, user, router]);
+
 	async function processNewEmails() {
 		setProcessing(true);
 		setError(null);
 		try {
-			const res = await fetch(`${API_BASE}/digest/process`, { method: "POST" });
+			const res = await fetch(`${API_BASE}/digest/process`, {
+				method: "POST",
+				credentials: "include",
+			});
 			if (!res.ok) throw new Error(`Server responded with ${res.status}`);
 			const data = await res.json();
 			setDigest(data.digest);
@@ -55,7 +70,9 @@ export default function Home() {
 		let cancelled = false;
 		async function loadOnMount() {
 			try {
-				const res = await fetch(`${API_BASE}/digest/latest`);
+				const res = await fetch(`${API_BASE}/digest/latest`, {
+					credentials: "include",
+				});
 				if (!res.ok) throw new Error(`Server responded with ${res.status}`);
 				const data = await res.json();
 				if (!cancelled) setDigest(data.digest);
@@ -75,7 +92,9 @@ export default function Home() {
 
 	async function loadAnalytics() {
 		try {
-			const res = await fetch(`${API_BASE}/analytics/daily`);
+			const res = await fetch(`${API_BASE}/analytics/daily`, {
+				credentials: "include",
+			});
 			if (!res.ok) return; // non-critical; fail silently
 			const data = await res.json();
 			setAnalytics(data.analytics ?? []);
@@ -106,6 +125,15 @@ export default function Home() {
 		if (panelIndex < activeIndex) return "-translate-x-full";
 		if (panelIndex > activeIndex) return "translate-x-full";
 		return "translate-x-0";
+	}
+
+	//While checking auth, or if not logged in, show nothing/ loading.
+	if (authLoading || user === null) {
+		return (
+			<div className="flex h-screen items-center justify-center bg-canvas">
+				<p className="text-sm text-ink-soft">Loading…</p>
+			</div>
+		);
 	}
 
 	return (

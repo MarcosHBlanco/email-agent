@@ -150,3 +150,13 @@ def logout(response: Response, session: str | None = Cookie(default=None)) -> di
         auth.delete_session(session)
     response.delete_cookie(key="session")
     return {"ok": True}
+
+
+@app.get("/auth/me")
+def get_me(user: dict = Depends(get_current_user)) -> dict:
+    """Return the currently logged-in user, or 401 if not authenticated.
+
+    The frontend calls this on load to check whether someone is logged in.
+    """
+
+    return {"id": user["id"], "email": user["email"]}
