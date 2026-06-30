@@ -12,12 +12,12 @@ from email_agent.categorizer import categorize_email
 from email_agent.gmail_client import get_email_service, fetch_recent_emails
 
 
-def _hours_since_last_run() -> int:
+def _hours_since_last_run(user_id: int) -> int:
     """
     If there was a previous run, look back to just after it. Otherwise,
     fall back to the default window (first run looks back 24 hours).
     """
-    last_run = db.get_last_run_time()
+    last_run = db.get_last_run_time(user_id)
     if last_run is None:
         return config.DEFAULT_HOURS_BACK
 
@@ -28,7 +28,7 @@ def _hours_since_last_run() -> int:
     return max(hours, 1)
 
 
-def run_digest() -> dict:
+def run_digest(user_id: int) -> dict:
     """Run one full digest cycle and return structured digest data.
 
     Returns a dict with:
@@ -37,8 +37,7 @@ def run_digest() -> dict:
         - buckets: dict of category -> list of {gmail_id, sender, subject, summary, reason}
     """
     db.init_db()
-
-    hours_back = _hours_since_last_run()
+    hours_back = _hours_since_last_run(user_id)
     window_start = (
         datetime.now(timezone.utc) - timedelta(hours=hours_back)
     ).isoformat()
@@ -48,7 +47,9 @@ def run_digest() -> dict:
         service, hours_back=hours_back, max_results=config.MAX_EMAILS_PER_RUN
     )
 
-    run_id = db.record_run(window_start=window_start, emails_processed=len(emails))
+    run_id = db.record_run(
+        user_id=user_id, window_start=window_start, emails_processed=len(emails)
+    )
 
     # Categorize every email and collect results into three buckets
     buckets: dict[str, list[dict]] = {"IMPORTANT": [], "ROUTINE": [], "JUNK": []}

@@ -17,3 +17,4 @@ credentials.json
 token.json
 email_agent.db
 cookies.txt
+cookie*.txt

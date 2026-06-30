@@ -61,7 +61,7 @@ def get_latest_digest(user: dict = Depends(get_current_user)) -> dict:
     Fast — just a database read, no Claude calls. Returns the stored digest,
     or a 'no digest yet' shape if nothing has been processed.
     """
-    digest = db.get_latest_digest()
+    digest = db.get_latest_digest(user["id"])
     if digest is None:
         return {
             "digest": None,
@@ -76,7 +76,7 @@ def process_digest(user: dict = Depends(get_current_user)) -> dict:
 
     Slow — calls Claude for each new email. Returns the freshly produced digest.
     """
-    digest = run_digest()
+    digest = run_digest(user["id"])
     return {"digest": digest}
 
 
@@ -87,7 +87,7 @@ def get_daily_analytics(user: dict = Depends(get_current_user)) -> dict:
     Feeds both the calendar grid and the trend charts. Fast — just a
     database aggregation, no Claude calls.
     """
-    data = db.get_daily_analytics()
+    data = db.get_daily_analytics(user["id"])
     return {"analytics": data}
 
 

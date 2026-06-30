@@ -34,9 +34,11 @@ def init_db() -> None:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS runs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
                 run_at TEXT NOT NULL,
                 window_start TEXT NOT NULL,
-                emails_processed INTEGER NOT NULL
+                emails_processed INTEGER NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users (id)
             )
             """)
         conn.execute("""
@@ -80,13 +82,13 @@ def init_db() -> None:
             """)
 
 
-def record_run(window_start: str, emails_processed: int) -> int:
+def record_run(user_id: int, window_start: str, emails_processed: int) -> int:
     """Insert a row into runs and return its new id."""
     run_at = datetime.now(timezone.utc).isoformat()
     with get_connection() as conn:
         cursor = conn.execute(
-            "INSERT INTO runs (run_at, window_start, emails_processed) VALUES (?, ?, ?)",
-            (run_at, window_start, emails_processed),
+            "INSERT INTO runs (user_id, run_at, window_start, emails_processed) VALUES (?, ?, ?, ?)",
+            (user_id, run_at, window_start, emails_processed),
         )
         assert cursor.lastrowid is not None
         return cursor.lastrowid
@@ -121,32 +123,40 @@ def save_digest(run_id: int, digest_text: str, digest_data: dict) -> None:
         )
 
 
-def get_last_run_time() -> str | None:
-    """Return the run_at timestamp of the most recent run, or None if no runs yet."""
+def get_last_run_time(user_id: int) -> str | None:
+    """Return the run_at of the user's most recent run, or None if none yet."""
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT run_at FROM runs ORDER BY id DESC LIMIT 1"
+            "SELECT run_at FROM runs WHERE user_id = ? ORDER BY id DESC LIMIT 1",
+            (user_id,),
         ).fetchone()
         return row["run_at"] if row else None
 
 
-def get_latest_digest() -> dict | None:
-    """Return the most recent stored digest as structured data, or None if none exist.
+def get_latest_digest(user_id: int) -> dict | None:
+    """Return the most recent stored digest for a specific user, or None.
 
-    Reads the stored JSON string and parses it back into a dict. This is the
-    READ path: fast, no Claude calls, just a database lookup.
+    Joins digests -> runs to filter by the run's owner.
     """
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT digest_json FROM digests ORDER BY id DESC LIMIT 1"
+            """
+            SELECT d.digest_json
+            FROM digests d
+            JOIN runs r ON d.run_id = r.id
+            WHERE r.user_id = ?
+            ORDER BY d.id DESC
+            LIMIT 1
+            """,
+            (user_id,),
         ).fetchone()
         if row is None:
             return None
         return json.loads(row["digest_json"])
 
 
-def get_daily_analytics() -> list[dict]:
-    """Aggregate categorizations by calendar day and category.
+def get_daily_analytics(user_id: int) -> list[dict]:
+    """Aggregate a specific user's categorizations by calendar day and category.
 
     Returns one entry per day that had activity, with distinct-email counts
     per category. Distinct because the same email re-categorized in multiple
@@ -155,17 +165,22 @@ def get_daily_analytics() -> list[dict]:
     Shape: [{"date": "2026-06-09", "IMPORTANT": 3, "ROUTINE": 1,
              "JUNK": 8, "total": 12}, ...] ordered oldest to newest.
     """
+
     with get_connection() as conn:
-        rows = conn.execute("""
+        rows = conn.execute(
+            """
             SELECT
                 date(r.run_at) AS day,
                 ec.category AS category,
                 COUNT(DISTINCT ec.gmail_id) AS count
             FROM email_categorizations ec
             JOIN runs r ON ec.run_id = r.id
+            WHERE r.user_id = ?
             GROUP BY day, ec.category
             ORDER BY day ASC
-            """).fetchall()
+            """,
+            (user_id,),
+        ).fetchall()
 
     # Reshape flat (day, category, count) rows into one dict per day.
     by_day: dict[str, dict] = {}
