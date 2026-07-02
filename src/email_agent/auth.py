@@ -1,13 +1,19 @@
-"""Authentication: password hashing and session management."""
+"""Authentication: password hashing, sessions, and token encryption."""
 
+import os
 import secrets
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
+from cryptography.fernet import Fernet
+from dotenv import load_dotenv
 
 from email_agent import db
 
-# I'll use bcrypt -- well-tested, deliberately-slow hashing algorithm
+load_dotenv()  # ensure .env is loaded before we read FERNET_KEY
+
+# Build the Fernet cipher once, from the key in .env.
+_fernet = Fernet(os.environ["FERNET_KEY"])
 
 
 def hash_password(plain_password: str) -> str:
@@ -20,6 +26,16 @@ def verify_password(plain_password: str, password_hash: str) -> bool:
     password_bytes = plain_password.encode("utf-8")
     hash_bytes = password_hash.encode("utf-")
     return bcrypt.checkpw(password_bytes, hash_bytes)
+
+
+def encrypt_token(plaintext: str) -> str:
+    """Encrypt a token for safe storage. Returns an encrypted string."""
+    return _fernet.encrypt(plaintext.encode("utf-8")).decode("utf-8")
+
+
+def decrypt_token(encrypted: str) -> str:
+    """Decrypt a stored token back to its original value."""
+    return _fernet.decrypt(encrypted.encode("utf-8")).decode("utf-8")
 
 
 # How long a session stays valid before the user must log in again.

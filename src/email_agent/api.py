@@ -6,6 +6,10 @@ Exposes two distinct paths:
 
 """
 
+from dotenv import load_dotenv
+
+load_dotenv()  # load .env before anything reads env vars
+
 from fastapi import FastAPI, Response, Cookie, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
