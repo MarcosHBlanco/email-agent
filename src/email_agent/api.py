@@ -6,9 +6,34 @@ Exposes two distinct paths:
 
 """
 
+import os
+import secrets
+
+from click import prompt
+from fastapi.responses import RedirectResponse
+from google_auth_oauthlib.flow import Flow
+from googleapiclient.discovery import build
+
 from dotenv import load_dotenv
 
 load_dotenv()  # load .env before anything reads env vars
+
+GOOGLE_CLIENT_ID = os.environ["GOOGLE_CLIENT_ID"]
+GOOGLE_CLIENT_SECRET = os.environ["GOOGLE_CLIENT_SECRET"]
+GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+REDIRECT_URI = "http://localhost:8000/auth/gmail/callback"
+
+# The client config the Google Flow object expects (built from env vars,
+# rather than a credentials.json file, so secrets stay in .env).
+GOOGLE_CLIENT_CONFIG = {
+    "web": {
+        "client_id": GOOGLE_CLIENT_ID,
+        "client_secret": GOOGLE_CLIENT_SECRET,
+        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+        "token_uri": "https://oauth2.googleapis.com/token",
+        "redirect_uris": [REDIRECT_URI],
+    }
+}
 
 from fastapi import FastAPI, Response, Cookie, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -164,3 +189,82 @@ def get_me(user: dict = Depends(get_current_user)) -> dict:
     """
 
     return {"id": user["id"], "email": user["email"]}
+
+
+def build_gmail_flow() -> Flow:
+    """Build a Gmail OAuth Flow with PKCE's code verifier disabled.
+
+    This is a confidential client (we hold a client secret server-side), so the
+    secret provides the security PKCE would add for public clients. Disabling
+    the auto-generated code verifier avoids needing to persist it between the
+    connect and callback requests (which use separate Flow instances).
+    """
+    flow = Flow.from_client_config(
+        GOOGLE_CLIENT_CONFIG,
+        scopes=GMAIL_SCOPES,
+        redirect_uri=REDIRECT_URI,
+        autogenerate_code_verifier=False,
+    )
+    return flow
+
+
+@app.get("/auth/gmail/connect")
+def gmail_connect(user: dict = Depends(get_current_user)):
+    """Start the Gmail OAuth flow: redirect the user to Google's consent screen."""
+    flow = build_gmail_flow()
+
+    # Generate a random state (CSRF ticket) and remember it for this user.
+    state = secrets.token_urlsafe(32)
+    db.save_oauth_state(state, user["id"])
+
+    # Build Google's authorization URL.
+    auth_url, _ = flow.authorization_url(
+        access_type="offline",  # so we get a refresh token
+        prompt="consent",  # force the consent screen (ensures refresh token)
+        state=state,  # our CSRF ticket, round-trip through Google
+    )
+
+    # Redirect the user's browser to Google.
+    return RedirectResponse(auth_url)
+
+
+@app.get("/auth/gmail/callback")
+def gmail_callback(code: str, state: str):
+    """Handle Google's redirect: verify state, exchange code for tokens, store them."""
+    # 1. Verify the state (CSRF check) — must match one we issued.
+    state_record = db.get_oauth_state(state)
+    if state_record is None:
+        raise HTTPException(status_code=400, detail="Invalid or expired state")
+
+    user_id = state_record["user_id"]
+    db.delete_oauth_state(state)  # one-time use — consume it now
+
+    # 2. Exchange the authorization code for tokens.
+    flow = build_gmail_flow()
+    flow.fetch_token(code=code)
+    creds = flow.credentials
+
+    # 3. Find out which Gmail address they connected.
+    service = build("gmail", "v1", credentials=creds)
+    profile = service.users().getProfile(userId="me").execute()
+    google_email = profile["emailAddress"]
+
+    # 4. Store the connection (tokens encrypted in the db layer).
+    if creds.token is None or creds.refresh_token is None:
+        # Missing tokens — usually means Google didn't issue a refresh token.
+        # Send the user back to reconnect (with a flag the frontend can read).
+        raise HTTPException(
+            status_code=400,
+            detail="Gmail connection failed: no refresh token received. Please try connecting again.",
+        )
+
+    db.save_gmail_connection(
+        user_id=user_id,
+        google_email=google_email,
+        access_token=creds.token,
+        refresh_token=creds.refresh_token,
+        token_expiry=creds.expiry.isoformat() if creds.expiry else "",
+    )
+
+    # 5. Send the user back to the app.
+    return RedirectResponse("http://localhost:3000")

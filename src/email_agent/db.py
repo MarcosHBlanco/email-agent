@@ -94,6 +94,15 @@ def init_db() -> None:
             )
             """)
 
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS oauth_states (
+                state TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            )
+            """)
+
 
 def record_run(user_id: int, window_start: str, emails_processed: int) -> int:
     """Insert a row into runs and return its new id."""
@@ -303,3 +312,29 @@ def get_gmail_connection(user_id: int) -> dict | None:
         "token_expiry": row["token_expiry"],
         "connected_at": row["connected_at"],
     }
+
+
+def save_oauth_state(state: str, user_id: str) -> None:
+    """Store a pending OAuth state (CSRF ticket) for a user."""
+    created_at = datetime.now(timezone.utc).isoformat()
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO oauth_states (state, user_id, created_at) VALUES (?, ?, ?)",
+            (state, user_id, created_at),
+        )
+
+
+def get_oauth_state(state: str) -> dict | None:
+    """Look up a pending OAuth state. Returns {user_id, created_at} or None"""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT user_id, created_at FROM oauth_states WHERE state =?",
+            (state,),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def delete_oauth_state(state: str) -> None:
+    """Delete a used OAuth state (one-time use)."""
+    with get_connection() as conn:
+        conn.execute("DELETE FROM oauth_states WHERE state = ?", (state,))
