@@ -8,8 +8,9 @@ import json
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
+import time
 
-from email_agent import config
+from email_agent import config, crypto
 
 
 @contextmanager
@@ -77,6 +78,18 @@ def init_db() -> None:
                 user_id INTEGER NOT NULL,
                 created_at TEXT NOT NULL,
                 expires_at TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            )
+            """)
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS gmail_connections (
+                user_id INTEGER PRIMARY KEY,
+                google_email TEXT NOT NULL,
+                access_token_encrypted TEXT NOT NULL,
+                refresh_token_encrypted TEXT NOT NULL,
+                token_expiry TEXT NOT NULL,
+                connected_at TEXT NOT NULL,
                 FOREIGN KEY (user_id) REFERENCES users (id)
             )
             """)
@@ -230,3 +243,63 @@ def get_user_by_id(user_id: int) -> dict | None:
             (user_id,),
         ).fetchone()
         return dict(row) if row else None
+
+
+def save_gmail_connection(
+    user_id: int,
+    google_email: str,
+    access_token: str,
+    refresh_token: str,
+    token_expiry: str,
+) -> None:
+    """Store (or replace) a user's Gmail connection with encrypted tokens.
+
+    Takes PLAINTEXT tokens and encrypts them here — the db layer is the single
+    guardian ensuring tokens are never stored unencrypted.
+    """
+    access_encrypted = crypto.encrypt_token(access_token)
+    refresh_encrypted = crypto.encrypt_token(refresh_token)
+    connected_at = datetime.now(timezone.utc).isoformat()
+
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO gmail_connections
+                (user_id, google_email, access_token_encrypted,
+                 refresh_token_encrypted, token_expiry, connected_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                user_id,
+                google_email,
+                access_encrypted,
+                refresh_encrypted,
+                token_expiry,
+                connected_at,
+            ),
+        )
+
+
+def get_gmail_connection(user_id: int) -> dict | None:
+    """Load a user's Gmail connection with tokens DECRYPTED for use.
+
+    Returns a dict with plaintext tokens ready to use, or None if the user
+    hasn't connected Gmail.
+    """
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT * FROM gmail_connections WHERE user_id = ?",
+            (user_id,),
+        ).fetchone()
+
+    if row is None:
+        return None
+
+    return {
+        "user_id": row["user_id"],
+        "google_email": row["google_email"],
+        "access_token": crypto.decrypt_token(row["access_token_encrypted"]),
+        "refresh_token": crypto.decrypt_token(row["refresh_token_encrypted"]),
+        "token_expiry": row["token_expiry"],
+        "connected_at": row["connected_at"],
+    }

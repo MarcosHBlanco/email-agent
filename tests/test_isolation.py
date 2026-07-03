@@ -1,6 +1,9 @@
 """Tests that users can only see their own data (no cross-user leakage)."""
 
-from email_agent import db
+from tkinter import NO
+import token
+
+from email_agent import db, crypto
 
 
 def _insert_digest_for_user(user_id: int, total: int) -> None:
@@ -81,3 +84,77 @@ def test_analytics_are_isolated_per_user(temp_db):
     total_b = sum(day["total"] for day in analytics_b)
     assert total_a == 10  # A's analytics total is A's emails only
     assert total_b == 99  # B's analytics total is B's emails only
+
+
+def test_gmail_connection_round_trips(temp_db):
+    """Saving then loading a Gmail connection returns the original tokens."""
+    user_id = db.create_user("gmailtest@test.com", "hash")
+    db.save_gmail_connection(
+        user_id=user_id,
+        google_email="connected@gmail.com",
+        access_token="access-abc",
+        refresh_token="refresh-xyz",
+        token_expiry="2026-01-01T00:00:00+00:00",
+    )
+
+    conn = db.get_gmail_connection(user_id)
+    assert conn is not None
+    assert conn["google_email"] == "connected@gmail.com"
+    assert conn["access_token"] == "access-abc"
+    assert conn["refresh_token"] == "refresh-xyz"
+
+
+def test_gmail_tokens_are_encrypted_at_rest(temp_db):
+    """The raw stored token must NOT be the plaintext — it must be encrypted."""
+    user_id = db.create_user("enc@test.com", "hash")
+    db.save_gmail_connection(
+        user_id=user_id,
+        google_email="e@gmail.com",
+        access_token="my-plaintext-token",
+        refresh_token="refresh-xyz",
+        token_expiry="2026-01-01T00:00:00+00:00",
+    )
+
+    # Read the RAW column directly (bypassing get_gmail_connection's decryption).
+    with db.get_connection() as c:
+        raw = c.execute(
+            "SELECT access_token_encrypted FROM gmail_connections WHERE user_id = ?",
+            (user_id,),
+        ).fetchone()
+
+    # The stored value must not equal the plaintext...
+    assert raw["access_token_encrypted"] != "my-plaintext-token"
+    # ...and it must actually decrypt back to the plaintext (proving it's real encryption).
+    assert crypto.decrypt_token(raw["access_token_encrypted"]) == "my-plaintext-token"
+
+
+def test_reconnect_replaces_connection(temp_db):
+    """Re-saving for the same user replaces the old connection (INSERT OR REPLACE)."""
+    user_id = db.create_user("recon@test.com", "hash")
+    db.save_gmail_connection(
+        user_id,
+        "old@gmail.com",
+        "old-access",
+        "old-refresh",
+        "2026-01-01T00:00:00+00:00",
+    )
+    db.save_gmail_connection(
+        user_id,
+        "new@gmail.com",
+        "new-access",
+        "new-refresh",
+        "2026-02-01T00:00:00+00:00",
+    )
+
+    conn = db.get_gmail_connection(user_id)
+    assert conn is not None
+    assert conn["google_email"] == "new@gmail.com"  # replaced, not duplicated
+    assert conn["access_token"] == "new-access"
+
+    # And there's exactly ONE row for this user (not two).
+    with db.get_connection() as c:
+        count = c.execute(
+            "SELECT COUNT(*) AS n FROM gmail_connections WHERE user_id = ?",
+            (user_id,),
+        ).fetchone()["n"]
+    assert count == 1
