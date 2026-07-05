@@ -8,6 +8,34 @@ import { useRouter } from "next/navigation";
 export default function Header() {
 	const { theme, toggleTheme } = useTheme();
 	const [mounted, setMounted] = useState(false);
+	const [gmail, setGmail] = useState<{
+		connected: boolean;
+		email: string | null;
+	} | null>(null);
+
+	useEffect(() => {
+		let cancelled = false;
+		async function loadGmailStatus() {
+			try {
+				const res = await fetch("http://localhost:8000/auth/gmail/status", {
+					credentials: "include",
+				});
+				if (!res.ok) return;
+				const data = await res.json();
+				if (!cancelled) setGmail(data);
+			} catch {
+				// non-critical; leave null}
+			}
+		}
+		loadGmailStatus();
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+
+	function connectGmail() {
+		window.location.href = "http://localhost:8000/auth/gmail/connect";
+	}
 
 	const { user, logout } = useAuth();
 	const router = useRouter();
@@ -35,6 +63,37 @@ export default function Header() {
 				<p className="text-xs text-ink-faint">
 					{user ? user.email : "Welcome"}
 				</p>
+			</div>
+
+			{/* Gmail connection status */}
+			<div className="flex items-center">
+				{gmail?.connected ? (
+					<div className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-ink-soft">
+						<span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+						<span className="hidden sm:inline">{gmail.email}</span>
+						<span className="sm:hidden">Gmail</span>
+					</div>
+				) : gmail && !gmail.connected ? (
+					<button
+						onClick={connectGmail}
+						className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-ink transition-colors hover:bg-surface-hover"
+					>
+						<svg
+							width="14"
+							height="14"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							strokeWidth="2"
+							strokeLinecap="round"
+							strokeLinejoin="round"
+						>
+							<rect x="2" y="4" width="20" height="16" rx="2" />
+							<path d="m22 7-10 5L2 7" />
+						</svg>
+						Connect Gmail
+					</button>
+				) : null}
 			</div>
 
 			<div className="flex items-center gap-1">

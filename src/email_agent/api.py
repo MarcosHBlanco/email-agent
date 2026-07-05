@@ -276,3 +276,12 @@ def gmail_callback(code: str, state: str):
 
     # 5. Send the user back to the app.
     return RedirectResponse("http://localhost:3000")
+
+
+@app.get("/auth/gmail/status")
+def gmail_status(user: dict = Depends(get_current_user)) -> dict:
+    """Report whether the current user has a Gmail account connected."""
+    connection = db.get_gmail_connection(user["id"])
+    if connection is None:
+        return {"connected": False, "email": None}
+    return {"connected": True, "email": connection["google_email"]}
