@@ -23,7 +23,7 @@ export default function LoginPage() {
 			} else {
 				await signup(email, password);
 			}
-			router.push("/"); // success → go to the app
+			router.push("/app"); // success → go to the app
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Something went wrong");
 		} finally {
