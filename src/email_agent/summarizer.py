@@ -42,7 +42,7 @@ def run_digest(user_id: int) -> dict:
         datetime.now(timezone.utc) - timedelta(hours=hours_back)
     ).isoformat()
 
-    service = get_email_service()
+    service = get_email_service(user_id)
     emails = fetch_recent_emails(
         service, hours_back=hours_back, max_results=config.MAX_EMAILS_PER_RUN
     )

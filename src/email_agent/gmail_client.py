@@ -1,40 +1,64 @@
 """Gmail client. Handles OAuth authentication and email fetching."""
 
-import os.path
+import os
+
 from datetime import datetime, timedelta, timezone
+from os import access
+from sqlite3 import connect
 from typing import Any
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
+
+from email_agent import db
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 
+# Google's OAuth token endpoints — needed to reconstruct Credentials and refresh.
+TOKEN_URI = "https://oauth2.googleapis.com/token"
 
-def get_email_service() -> Any:
-    """Authenticate with Gmail and return a service object.
 
-    Uses cached token.json if available; otherwise launches the OAuth
-    browser flow and saves the token for next time.
+class GmailNotConnectedError(Exception):
+    """Raised when a user tries to use Gmail but hans't connected an account."""
 
-    Returns:
-        A Gmail API service object ready for use.
+
+def get_email_service(user_id: int) -> Any:
+    """Build a Gmail service for a specific user from their stored tokens.
+
+    Loads the user's encrypted connection, reconstructs credentials, refreshes
+    the access token if expired (re-saving-it), and returns a Gmail service.
+
+    Raises GmailNotConnectedError if the user hans't connected their Gmail.
     """
-    creds = None
 
-    if os.path.exists("token.json"):
-        creds = Credentials.from_authorized_user_file("token.json", SCOPES)
+    connection = db.get_gmail_connection(user_id)
+    if connection is None:
+        raise GmailNotConnectedError(
+            f"User {user_id} has not connected a Gmail account."
+        )
 
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file("credentials.json", SCOPES)
-            creds = flow.run_local_server(port=0)
+    # Reconstruct the Credentials object from out stored tokens
+    creds = Credentials(
+        token=connection["access_token"],
+        refresh_token=connection["refresh_token"],
+        token_uri=TOKEN_URI,
+        client_id=os.environ["GOOGLE_CLIENT_ID"],
+        client_secret=os.environ["GOOGLE_CLIENT_SECRET"],
+        scopes=SCOPES,
+    )
 
-        with open("token.json", "w") as token:
-            token.write(creds.to_json())
+    # If the access token is expired, refresh it and save the new one.
+    if not creds.valid:
+        creds.refresh(Request())
+        # creds.token is now a fresh access token - save it back (encrypted)
+        db.save_gmail_connection(
+            user_id=user_id,
+            google_email=connection["google_email"],
+            access_token=creds.token,
+            refresh_token=creds.refresh_token or connection["refresh_token"],
+            token_expiry=creds.expiry.isoformat() if creds.expiry else "",
+        )
 
     service = build("gmail", "v1", credentials=creds)
     return service

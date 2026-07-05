@@ -55,7 +55,10 @@ export default function Home() {
 				method: "POST",
 				credentials: "include",
 			});
-			if (!res.ok) throw new Error(`Server responded with ${res.status}`);
+			if (!res.ok) {
+				const data = await res.json().catch(() => ({}));
+				throw new Error(data.detail ?? `Something qwent wrong (${res.status})`);
+			}
 			const data = await res.json();
 			setDigest(data.digest);
 			await loadAnalytics(); //refresh calendar/chart data too

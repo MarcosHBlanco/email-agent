@@ -16,6 +16,8 @@ from googleapiclient.discovery import build
 
 from dotenv import load_dotenv
 
+from email_agent.gmail_client import GmailNotConnectedError
+
 load_dotenv()  # load .env before anything reads env vars
 
 GOOGLE_CLIENT_ID = os.environ["GOOGLE_CLIENT_ID"]
@@ -105,7 +107,13 @@ def process_digest(user: dict = Depends(get_current_user)) -> dict:
 
     Slow — calls Claude for each new email. Returns the freshly produced digest.
     """
-    digest = run_digest(user["id"])
+    try:
+        digest = run_digest(user["id"])
+    except GmailNotConnectedError:
+        raise HTTPException(
+            status_code=409,
+            detail="No Gmail account connected. Please connect your Gmail first.",
+        )
     return {"digest": digest}
 
 
