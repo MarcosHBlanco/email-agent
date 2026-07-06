@@ -72,6 +72,12 @@ def init_db() -> None:
             )
             """)
 
+        # Migration: add preferences column to users if it doesn't exist yet.
+        # (Existing users get NULL until they set preferences.)
+        cols = conn.execute("PRAGMA table_info(users)").fetchall()
+        if not any(c["name"] == "preferences" for c in cols):
+            conn.execute("ALTER TABLE users ADD COLUMN preferences TEXT")
+
         conn.execute("""
             CREATE TABLE IF NOT EXISTS sessions (
                 id TEXT PRIMARY KEY,
@@ -252,6 +258,32 @@ def get_user_by_id(user_id: int) -> dict | None:
             (user_id,),
         ).fetchone()
         return dict(row) if row else None
+
+
+def save_user_preferences(user_id: int, preferences: dict) -> None:
+    """Store a user's categorization preferences as JSON.
+
+    Preferences is a dict (profession, interests, example senders/keywords,
+    and free-text important/routine/junk examples). Serialized to JSON text.
+    """
+    preferences_json = json.dumps(preferences)
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE users SET preferences = ? WHERE id = ?",
+            (preferences_json, user_id),
+        )
+
+
+def get_user_preferences(user_id: int) -> dict | None:
+    """Load a user's categorization preferences, or None if not set yet."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT preferences FROM users WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+    if row is None or row["preferences"] is None:
+        return None
+    return json.loads(row["preferences"])
 
 
 def save_gmail_connection(

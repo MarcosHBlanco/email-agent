@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from email_agent import config
 from email_agent.llm import ask_claude
 from email_agent.prompts import (
-    CATEGORIZATION_SYSTEM_PROMPT,
+    build_categorization_system_prompt,
     build_categorization_user_message,
 )
 
@@ -22,31 +22,35 @@ class CategorizationResult:
     summary: str
 
 
-def categorize_email(email: dict) -> CategorizationResult:
+def categorize_email(
+    email: dict, preferences: dict | None = None
+) -> CategorizationResult:
     """Send one email to Claude and return its category, reason, and summary.
 
     Args:
         email: A dict with 'subject', 'sender', and 'snippet' keys
                (as produced by gmail_client.fetch_recent_emails).
+        preferences: The user's categorization preferences, used to personalize
+               the prompt. If None, a sensible general-purpose prompt is used.
 
     Returns:
         A CategorizationResult. If anything goes wrong, falls back to
         IMPORTANT (the safe default - better to surface than to hide).
     """
+    system_prompt = build_categorization_system_prompt(preferences)
+
     user_message = build_categorization_user_message(
         subject=email.get("subject", "(no subject)"),
         sender=email.get("sender", "(unknown sender)"),
         snippet=email.get("snippet", ""),
     )
-
-    full_prompt = CATEGORIZATION_SYSTEM_PROMPT + "\n\n" + user_message
+    full_prompt = system_prompt + "\n\n" + user_message
 
     raw_response = ask_claude(
         full_prompt,
         max_tokens=config.CATEGORIZATION_MAX_TOKENS,
         model=config.CATEGORIZATION_MODEL,
     )
-
     return _parse_response(raw_response)
 
 

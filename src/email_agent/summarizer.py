@@ -43,6 +43,7 @@ def run_digest(user_id: int) -> dict:
     ).isoformat()
 
     service = get_email_service(user_id)
+    preferences = db.get_user_preferences(user_id)
     emails = fetch_recent_emails(
         service, hours_back=hours_back, max_results=config.MAX_EMAILS_PER_RUN
     )
@@ -55,7 +56,7 @@ def run_digest(user_id: int) -> dict:
     buckets: dict[str, list[dict]] = {"IMPORTANT": [], "ROUTINE": [], "JUNK": []}
 
     for email in emails:
-        result = categorize_email(email)
+        result = categorize_email(email, preferences)
         db.save_categorization(
             run_id=run_id,
             gmail_id=email.get("id", ""),
