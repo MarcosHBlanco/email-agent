@@ -17,6 +17,7 @@ from googleapiclient.discovery import build
 from dotenv import load_dotenv
 
 from email_agent.gmail_client import GmailNotConnectedError
+from email_agent import personas
 
 load_dotenv()  # load .env before anything reads env vars
 
@@ -153,6 +154,23 @@ def update_preferences(
     """Save the current user's categorization preferences."""
     db.save_user_preferences(user["id"], body.model_dump())
     return {"status": "saved", "preferences": body.model_dump()}
+
+
+@app.get("/preferences/personas")
+def get_personas() -> dict:
+    """Return the persona templates for onboarding (label, description, seed)."""
+    return {
+        "personas": [
+            {
+                "key": key,
+                "label": p["label"],
+                "description": p["description"],
+                "seed": p["seed"],
+            }
+            for key, p in personas.PERSONAS.items()
+        ],
+        "interest_options": personas.INTEREST_OPTIONS,
+    }
 
 
 # ===== Auth =====
