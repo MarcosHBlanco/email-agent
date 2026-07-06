@@ -128,6 +128,33 @@ def get_daily_analytics(user: dict = Depends(get_current_user)) -> dict:
     return {"analytics": data}
 
 
+class PreferencesUpdate(BaseModel):
+    profession: str = ""
+    interests: list[str] = []
+    important_senders: str = ""
+    important_keywords: str = ""
+    important_examples: str = ""
+    routine_examples: str = ""
+    junk_examples: str = ""
+
+
+@app.get("/preferences")
+def get_preferences(user: dict = Depends(get_current_user)) -> dict:
+    """Return the current user's cagegorization preferences (or None if unset.)"""
+    preferences = db.get_user_preferences(user["id"])
+    return {"preferences": preferences}
+
+
+@app.put("/preferences")
+def update_preferences(
+    body: PreferencesUpdate,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Save the current user's categorization preferences."""
+    db.save_user_preferences(user["id"], body.model_dump())
+    return {"status": "saved", "preferences": body.model_dump()}
+
+
 # ===== Auth =====
 
 
