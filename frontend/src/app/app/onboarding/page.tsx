@@ -101,7 +101,7 @@ export default function OnboardingPage() {
 		setPrefs({ ...EMPTY_PREFS, ...persona.seed });
 	}
 
-	async function finish() {
+	async function completeOnboarding() {
 		setSaving(true);
 		try {
 			await fetch(`${API_BASE}/preferences`, {
@@ -113,10 +113,6 @@ export default function OnboardingPage() {
 		} catch {
 			// even if save fails, don't trap them here
 		}
-		router.push("/app");
-	}
-
-	function skip() {
 		router.push("/app");
 	}
 
@@ -153,7 +149,7 @@ export default function OnboardingPage() {
 						<span className="font-semibold">Sift</span>
 					</div>
 					<button
-						onClick={skip}
+						onClick={completeOnboarding}
 						className="text-sm text-ink-faint transition-colors hover:text-ink-soft"
 					>
 						Skip for now
@@ -346,7 +342,7 @@ export default function OnboardingPage() {
 						</button>
 					) : (
 						<button
-							onClick={finish}
+							onClick={completeOnboarding}
 							disabled={saving}
 							className="rounded-xl bg-accent px-7 py-3 text-sm font-semibold text-white shadow-lg transition-all hover:-translate-y-0.5 hover:bg-accent-hover disabled:opacity-60"
 						>
