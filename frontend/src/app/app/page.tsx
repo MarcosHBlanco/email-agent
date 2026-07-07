@@ -31,6 +31,7 @@ export default function Home() {
 	const [loading, setLoading] = useState(true);
 	const [processing, setProcessing] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [needsReauth, setNeedsReauth] = useState(false);
 	const [selected, setSelected] = useState<CategoryFilter>("ALL");
 	const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
 	const [mobileView, setMobileView] = useState<MobileView>("categories");
@@ -47,9 +48,16 @@ export default function Home() {
 		}
 	}, [authLoading, user, router]);
 
+	function reconnectGmail() {
+		// Same entry point the Header uses for first-time connect — re-running
+		// consent issues a fresh refresh token and overwrites the dead one.
+		window.location.href = `${API_BASE}/auth/gmail/connect`;
+	}
+
 	async function processNewEmails() {
 		setProcessing(true);
 		setError(null);
+		setNeedsReauth(false); // clear any prior reauth state on a fresh attempt
 		try {
 			const res = await fetch(`${API_BASE}/digest/process`, {
 				method: "POST",
@@ -57,13 +65,26 @@ export default function Home() {
 			});
 			if (!res.ok) {
 				const data = await res.json().catch(() => ({}));
-				throw new Error(data.detail ?? `Something went wrong (${res.status})`);
+				// detail is a structured object {code, message} for known errors,
+				// or may be a plain string / absent for unexpected ones.
+				const detail = data.detail;
+				if (detail?.code === "gmail_reauth_required") {
+					setNeedsReauth(true);
+					setMobileView("detail"); // surface the banner where the user is looking
+					return; // handled — don't fall through to the generic error path
+				}
+				const message =
+					detail?.message ?? // structured error (e.g. gmail_not_connected)
+					(typeof detail === "string" ? detail : null) ?? // legacy string detail
+					`Something went wrong (${res.status})`;
+				throw new Error(message);
 			}
 			const data = await res.json();
 			setDigest(data.digest);
 			await loadAnalytics(); //refresh calendar/chart data too
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Something went wrong");
+			setMobileView("detail"); // surface the error where the user is looking
 		} finally {
 			setProcessing(false);
 		}
@@ -117,6 +138,10 @@ export default function Home() {
 	}
 
 	function handleSelectEmail(gmailId: string) {
+		// Picking an email means the user is moving on — dismiss a generic error
+		// so column 3 can show the email. needsReauth stays sticky: they truly
+		// can't proceed until they reconnect, so it keeps priority.
+		setError(null);
 		setSelectedEmailId(gmailId);
 		setMobileView("detail");
 	}
@@ -163,7 +188,7 @@ export default function Home() {
 				{/* DIGEST MODE — list + detail panels */}
 				{activeMode === "digest" && (
 					<>
-						{/* Column 2 — email list */}
+						{/* Column 2 — email list (list only: the digested email categories) */}
 						<div
 							className={`absolute inset-0 flex h-full w-full flex-col border-r border-border transition-transform duration-300 ease-out ${mobileOffset("list")} md:static md:w-80 md:shrink-0 md:translate-x-0 md:transition-none`}
 						>
@@ -179,19 +204,9 @@ export default function Home() {
 								</span>
 							</div>
 							<div className="flex-1 overflow-y-auto">
-								{error && (
-									<p className="m-3 rounded-md bg-important-soft px-3 py-2 text-sm text-important">
-										{error}
-									</p>
-								)}
 								{loading && (
 									<p className="px-3 py-4 text-sm text-ink-soft">
 										Loading latest digest…
-									</p>
-								)}
-								{!loading && processing && digest === null && (
-									<p className="px-3 py-4 text-sm text-ink-soft">
-										Processing your emails…
 									</p>
 								)}
 								{!loading && !processing && digest === null && (
@@ -211,7 +226,9 @@ export default function Home() {
 							</div>
 						</div>
 
-						{/* Column 3 — detail */}
+						{/* Column 3 — detail / process-outcome surface.
+						    Priority: reauth (blocking) > error > first-run processing >
+						    email detail > empty. All outcomes of a Process action live here. */}
 						<div
 							className={`absolute inset-0 flex h-full w-full flex-col overflow-hidden bg-surface transition-transform duration-300 ease-out ${mobileOffset("detail")} md:static md:flex-1 md:min-w-0 md:translate-x-0 md:transition-none`}
 						>
@@ -224,7 +241,64 @@ export default function Home() {
 								</button>
 							</div>
 							<div className="flex-1 overflow-hidden">
-								{digest ? (
+								{needsReauth ? (
+									<div className="flex h-full items-center justify-center p-6">
+										<div className="max-w-sm text-center">
+											<div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-important-soft">
+												<svg
+													width="24"
+													height="24"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													strokeWidth="2"
+													strokeLinecap="round"
+													strokeLinejoin="round"
+													className="text-important"
+												>
+													<path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+												</svg>
+											</div>
+											<h2 className="mb-2 text-lg font-semibold text-ink">
+												Gmail connection expired
+											</h2>
+											<p className="mb-6 text-sm text-ink-soft">
+												Your Gmail connection is no longer valid. Reconnect to
+												keep processing your inbox.
+											</p>
+											<button
+												onClick={reconnectGmail}
+												className="rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-white shadow-lg transition-all hover:-translate-y-0.5 hover:bg-accent-hover"
+											>
+												Reconnect Gmail
+											</button>
+										</div>
+									</div>
+								) : error ? (
+									<div className="flex h-full items-center justify-center p-6">
+										<div className="max-w-sm text-center">
+											<h2 className="mb-2 text-lg font-semibold text-ink">
+												Something went wrong
+											</h2>
+											<p className="mb-6 text-sm text-ink-soft">{error}</p>
+											<button
+												onClick={processNewEmails}
+												className="rounded-lg border border-border px-5 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-surface-hover"
+											>
+												Try again
+											</button>
+										</div>
+									</div>
+								) : processing && digest === null ? (
+									<div className="flex h-full items-center justify-center p-6">
+										<div className="text-center">
+											<div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-border border-t-accent" />
+											<p className="text-sm text-ink-soft">
+												Processing your emails…
+											</p>
+										</div>
+									</div>
+								) : digest ? (
 									<EmailDetail
 										digest={digest}
 										selectedEmailId={selectedEmailId}

@@ -9,11 +9,15 @@ from typing import Any
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
+from google.auth.exceptions import RefreshError
 from googleapiclient.discovery import build
 
 from email_agent import db
 
-SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+SCOPES = [
+    "https://www.googleapis.com/auth/gmail.modify",  # read + trash/untrash + label changes
+    "https://www.googleapis.com/auth/gmail.send",  # send replies
+]
 
 # Google's OAuth token endpoints — needed to reconstruct Credentials and refresh.
 TOKEN_URI = "https://oauth2.googleapis.com/token"
@@ -21,6 +25,11 @@ TOKEN_URI = "https://oauth2.googleapis.com/token"
 
 class GmailNotConnectedError(Exception):
     """Raised when a user tries to use Gmail but hans't connected an account."""
+
+
+class GmailReauthError(Exception):
+    """Raised when a user's stored token is expired or revoked and they must
+    reconnect their Gmail (e.g. Testing-mode 7-day expiry, or a scope change)."""
 
 
 def get_email_service(user_id: int) -> Any:
@@ -48,10 +57,24 @@ def get_email_service(user_id: int) -> Any:
         scopes=SCOPES,
     )
 
-    # If the access token is expired, refresh it and save the new one.
-    if not creds.valid:
-        creds.refresh(Request())
-        # creds.token is now a fresh access token - save it back (encrypted)
+    # We cannot trust creds.valid here: when credentials are reconstructed
+    # without an expiry (which is always, given the constructor above),
+    # creds.expiry is None, the library treats that as "not expired", and
+    # creds.valid returns True even for a dead token. So we proactively
+    # refresh at this chokepoint — forcing the token to prove itself HERE,
+    # inside our try/except, rather than letting a later .execute() trigger
+    # a lazy refresh somewhere we're not guarding.
+    if creds.refresh_token:
+        try:
+            creds.refresh(Request())
+        except RefreshError as e:
+            # Refresh token is dead: revoked, expired under Testing mode's
+            # 7-day rule, or invalidated by a scope change. Translate Google's
+            # low-level error into our domain language.
+            raise GmailReauthError(
+                f"User {user_id}'s Gmail token is no longer valid; reconnect required."
+            ) from e
+        # creds.token is now a fresh access token — save it back (encrypted).
         db.save_gmail_connection(
             user_id=user_id,
             google_email=connection["google_email"],
@@ -59,7 +82,6 @@ def get_email_service(user_id: int) -> Any:
             refresh_token=creds.refresh_token or connection["refresh_token"],
             token_expiry=creds.expiry.isoformat() if creds.expiry else "",
         )
-
     service = build("gmail", "v1", credentials=creds)
     return service
 

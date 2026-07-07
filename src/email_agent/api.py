@@ -16,15 +16,20 @@ from googleapiclient.discovery import build
 
 from dotenv import load_dotenv
 
-from email_agent.gmail_client import GmailNotConnectedError
+from email_agent.gmail_client import (
+    GmailNotConnectedError,
+    GmailReauthError,
+    SCOPES as GMAIL_SCOPES,
+)
 from email_agent import personas
 
 load_dotenv()  # load .env before anything reads env vars
 
 GOOGLE_CLIENT_ID = os.environ["GOOGLE_CLIENT_ID"]
 GOOGLE_CLIENT_SECRET = os.environ["GOOGLE_CLIENT_SECRET"]
-GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 REDIRECT_URI = "http://localhost:8000/auth/gmail/callback"
+
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
 
 # The client config the Google Flow object expects (built from env vars,
 # rather than a credentials.json file, so secrets stay in .env).
@@ -113,7 +118,18 @@ def process_digest(user: dict = Depends(get_current_user)) -> dict:
     except GmailNotConnectedError:
         raise HTTPException(
             status_code=409,
-            detail="No Gmail account connected. Please connect your Gmail first.",
+            detail={
+                "code": "gmail_not_connected",
+                "message": "No Gmail account connected. Please connect your Gmail first.",
+            },
+        )
+    except GmailReauthError:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "gmail_reauth_required",
+                "message": "Your Gmail connection expired. Please reconnect to continue.",
+            },
         )
     return {"digest": digest}
 
@@ -320,7 +336,7 @@ def gmail_callback(code: str, state: str):
     )
 
     # 5. Send the user back to the app.
-    return RedirectResponse("http://localhost:3000")
+    return RedirectResponse(f"{FRONTEND_URL}/app")
 
 
 @app.get("/auth/gmail/status")
