@@ -60,7 +60,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 		});
 		if (!res.ok) {
 			const data = await res.json().catch(() => ({}));
-			throw new Error(data.detail ?? "Login failed");
+			const detail = data.detail;
+			const message =
+				detail?.message ?? // structured {code, message}
+				(typeof detail === "string" ? detail : null) ?? // plain string
+				"Signup failed";
+			throw new Error(message);
 		}
 		const data = await res.json();
 		setUser(data);
@@ -71,11 +76,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 			credentials: "include",
-			body: JSON.stringify({ email, password }),
+			body: JSON.stringify({
+				email,
+				password,
+				// Capture the user's IANA timezone (e.g. "America/Vancouver") at
+				// account creation. The server must own this: scheduled digest
+				// runs fire with no browser present to ask.
+				timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+			}),
 		});
 		if (!res.ok) {
 			const data = await res.json().catch(() => ({}));
-			throw new Error(data.detail ?? "Signup failed");
+			const detail = data.detail;
+			const message =
+				detail?.message ?? // structured {code, message}
+				(typeof detail === "string" ? detail : null) ?? // plain string
+				"Signup failed";
+			throw new Error(message);
 		}
 		const data = await res.json();
 		setUser(data);

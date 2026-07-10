@@ -13,6 +13,8 @@ from click import prompt
 from fastapi.responses import RedirectResponse
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
+from zoneinfo import ZoneInfo  # or hoist to module imports
+from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 
@@ -50,7 +52,19 @@ from pydantic import BaseModel
 from email_agent import db, auth
 from email_agent.summarizer import run_digest
 
-app = FastAPI(title="Email Agent")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Run once on startup: make sure the schema exists before serving traffic.
+
+    Previously this only ran inside run_digest(), so a fresh database left
+    auth endpoints querying tables that didn't exist yet.
+    """
+    db.init_db()
+    yield
+
+
+app = FastAPI(title="Email Agent", lifespan=lifespan)
 
 
 def get_current_user(session: str | None = Cookie(default=None)) -> dict:
@@ -98,7 +112,7 @@ def get_latest_digest(user: dict = Depends(get_current_user)) -> dict:
     Fast — just a database read, no Claude calls. Returns the stored digest,
     or a 'no digest yet' shape if nothing has been processed.
     """
-    digest = db.get_latest_digest(user["id"])
+    digest = db.get_todays_digest(user["id"])
     if digest is None:
         return {
             "digest": None,
@@ -132,6 +146,15 @@ def process_digest(user: dict = Depends(get_current_user)) -> dict:
             },
         )
     return {"digest": digest}
+
+
+@app.post("/emails/{gmail_id}/read")
+def mark_email_read(gmail_id: str, user: dict = Depends(get_current_user)) -> dict:
+    """Mark one of the current user's emails as read."""
+    ok = db.mark_email_read(user["id"], gmail_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Email not found")
+    return {"ok": True}
 
 
 @app.get("/analytics/daily")
@@ -195,6 +218,7 @@ def get_personas() -> dict:
 class AuthRequest(BaseModel):
     email: str
     password: str
+    timezone: str = "UTC"  # IANA name from the browser; UTC if not sent
 
 
 @app.post("/auth/signup")
@@ -205,9 +229,15 @@ def signup(body: AuthRequest, response: Response) -> dict:
     if existing is not None:
         raise HTTPException(status_code=409, detail="Email already registered")
 
+    try:
+        ZoneInfo(body.timezone)
+        tz = body.timezone
+    except Exception:
+        tz = "UTC"
+
     # Hash the password and create the user.
     password_hash = auth.hash_password(body.password)
-    user_id = db.create_user(body.email, password_hash)
+    user_id = db.create_user(body.email, password_hash, body.timezone)
 
     # Log them in immediately: create a session and set it as a cookie.
     token = auth.create_session(user_id)

@@ -15,6 +15,10 @@ wheels/
 # Google OAuth credentials and tokens
 credentials.json
 token.json
-email_agent.db
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.db.old
 cookies.txt
 cookie*.txt

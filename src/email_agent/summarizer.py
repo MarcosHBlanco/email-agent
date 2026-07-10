@@ -28,15 +28,8 @@ def _hours_since_last_run(user_id: int) -> int:
     return max(hours, 1)
 
 
-def run_digest(user_id: int) -> dict:
-    """Run one full digest cycle and return structured digest data.
-
-    Returns a dict with:
-        - total: total number of emails processed
-        - generated_at: ISO timestamp of when this digest ran
-        - buckets: dict of category -> list of {gmail_id, sender, subject, summary, reason}
-    """
-    db.init_db()
+def run_digest(user_id: int) -> dict | None:
+    """Run one digest cycle; return TODAY'S accumulated digest (all runs)."""
     hours_back = _hours_since_last_run(user_id)
     window_start = (
         datetime.now(timezone.utc) - timedelta(hours=hours_back)
@@ -48,23 +41,31 @@ def run_digest(user_id: int) -> dict:
         service, hours_back=hours_back, max_results=config.MAX_EMAILS_PER_RUN
     )
 
+    # Drop anything we've already categorized BEFORE paying Claude for it.
+    # Lookback windows overlap by design (+1 hour), so this fires routinely.
+    known = db.get_known_gmail_ids(user_id, [e.get("id", "") for e in emails])
+    new_emails = [e for e in emails if e.get("id", "") not in known]
+
     run_id = db.record_run(
-        user_id=user_id, window_start=window_start, emails_processed=len(emails)
+        user_id=user_id, window_start=window_start, emails_processed=len(new_emails)
     )
 
-    # Categorize every email and collect results into three buckets
-    buckets: dict[str, list[dict]] = {"IMPORTANT": [], "ROUTINE": [], "JUNK": []}
+    # Per-run buckets, used only for the audit snapshot in the digests table.
+    run_buckets: dict[str, list[dict]] = {"IMPORTANT": [], "ROUTINE": [], "JUNK": []}
 
-    for email in emails:
+    for email in new_emails:
         result = categorize_email(email, preferences)
         db.save_categorization(
+            user_id=user_id,
             run_id=run_id,
             gmail_id=email.get("id", ""),
+            sender=email.get("sender", "(unknown sender)"),
+            subject=email.get("subject", "(no subject)"),
             category=result.category,
             reason=result.reason,
             summary=result.summary,
         )
-        buckets[result.category].append(
+        run_buckets[result.category].append(
             {
                 "gmail_id": email.get("id", ""),
                 "sender": email.get("sender", "(unknown sender)"),
@@ -74,20 +75,20 @@ def run_digest(user_id: int) -> dict:
             }
         )
 
-    digest_data = {
-        "total": len(emails),
+    # Audit record of THIS run only (what was new). The user-facing digest is
+    # today's accumulation, built separately below.
+    run_data = {
+        "total": len(new_emails),
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "buckets": buckets,
+        "buckets": run_buckets,
     }
-
-    # Store the snapshot: human-readable text + structured JSON for the frontend
     db.save_digest(
         run_id=run_id,
-        digest_text=format_digest_text(digest_data),
-        digest_data=digest_data,
+        digest_text=format_digest_text(run_data),
+        digest_data=run_data,
     )
 
-    return digest_data
+    return db.get_todays_digest(user_id)
 
 
 def format_digest_text(digest_data: dict) -> str:
