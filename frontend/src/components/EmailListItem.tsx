@@ -41,13 +41,17 @@ export default function EmailListItem({
 				/>
 			)}
 
-			<span className="relative z-10 w-full truncate text-xs text-ink-faint">
+			<span
+				className={`relative z-10 w-full truncate text-xs ${
+					email.is_read ? "text-ink-faint" : "text-ink-soft"
+				}`}
+			>
 				{email.sender}
 			</span>
 			<span
 				className={`relative z-10 w-full truncate text-sm ${
-					isSelected ? "font-semibold text-ink" : "text-ink-soft"
-				}`}
+					email.is_read ? "font-normal" : "font-semibold"
+				} ${isSelected || !email.is_read ? "text-ink" : "text-ink-soft"}`}
 			>
 				{email.subject}
 			</span>

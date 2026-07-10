@@ -34,6 +34,7 @@ export default function EmailList({
 		<div className="divide-y divide-border">
 			{categoriesToShow.map((category) => {
 				const items = digest.buckets[category];
+				const unread = items.filter((e) => !e.is_read).length;
 				return (
 					<section key={category} className="py-2">
 						<div className="flex items-center gap-2 px-3 py-1.5">
@@ -42,7 +43,7 @@ export default function EmailList({
 								{category}
 							</h2>
 							<span className="text-xs tabular-nums text-ink-faint">
-								{items.length}
+								{unread > 0 ? `${unread}/${items.length}` : items.length}
 							</span>
 						</div>
 

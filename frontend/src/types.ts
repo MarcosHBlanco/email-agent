@@ -7,6 +7,7 @@ export interface EmailItem {
 	subject: string;
 	summary: string;
 	reason: string;
+	is_read: boolean;
 }
 
 export interface DigestBuckets {
@@ -43,4 +44,18 @@ export function findEmailById(
 		}
 	}
 	return null;
+}
+
+// Return a NEW digest with one email marked read. Pure — never mutates.
+// React compares by object identity to decide what re-renders, so mutating
+// the existing digest in place would flip the data without updating the UI.
+export function markEmailReadInDigest(digest: Digest, gmailId: string): Digest {
+	const categories: (keyof DigestBuckets)[] = ["IMPORTANT", "ROUTINE", "JUNK"];
+	const buckets = {} as DigestBuckets;
+	for (const category of categories) {
+		buckets[category] = digest.buckets[category].map((e) =>
+			e.gmail_id === gmailId ? { ...e, is_read: true } : e,
+		);
+	}
+	return { ...digest, buckets };
 }

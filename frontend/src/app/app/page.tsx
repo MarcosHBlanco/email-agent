@@ -1,7 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Digest, DailyAnalytics } from "@/types";
+import {
+	Digest,
+	DailyAnalytics,
+	findEmailById,
+	markEmailReadInDigest,
+} from "@/types";
 import Rail from "@/components/Rail";
 import EmailList from "@/components/EmailList";
 import EmailDetail from "@/components/EmailDetail";
@@ -137,13 +142,32 @@ export default function Home() {
 		setMobileView("list");
 	}
 
+	function markAsRead(gmailId: string) {
+		if (!digest) return;
+
+		const found = findEmailById(digest, gmailId);
+		if (!found || found.email.is_read) return; // already read — no work, no request
+
+		// Optimistic: flip the UI immediately, then tell the server. Marking read
+		// is low-stakes, so we don't wait for the round-trip and we don't roll
+		// back on failure — worst case the email is bold again after a reload.
+		setDigest((prev) => (prev ? markEmailReadInDigest(prev, gmailId) : prev));
+
+		fetch(`${API_BASE}/emails/${encodeURIComponent(gmailId)}/read`, {
+			method: "POST",
+			credentials: "include",
+		}).catch(() => {
+			// deliberately silent — see above
+		});
+	}
+
 	function handleSelectEmail(gmailId: string) {
 		// Picking an email means the user is moving on — dismiss a generic error
-		// so column 3 can show the email. needsReauth stays sticky: they truly
-		// can't proceed until they reconnect, so it keeps priority.
+		// so column 3 can show the email. needsReauth stays sticky.
 		setError(null);
 		setSelectedEmailId(gmailId);
 		setMobileView("detail");
+		markAsRead(gmailId);
 	}
 
 	// Mobile slide: each panel's horizontal offset class based on position vs active view.
