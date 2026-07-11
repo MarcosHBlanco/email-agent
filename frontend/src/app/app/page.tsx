@@ -53,6 +53,35 @@ export default function Home() {
 		}
 	}, [authLoading, user, router]);
 
+	// Redirect to onboarding if the user hasn't set preferences yet.
+	// (Null preferences = never onboarded. Once onboarding saves prefs,
+	// this stops firing and the user stays on /app.)
+	useEffect(() => {
+		if (authLoading || user === null) return;
+
+		let cancelled = false;
+
+		async function checkOnboarding() {
+			try {
+				const res = await fetch(`${API_BASE}/preferences`, {
+					credentials: "include",
+				});
+				if (!res.ok) return; // fail open — don't trap on a transient error
+				const data = await res.json();
+				if (!cancelled && data.preferences === null) {
+					router.push("/app/onboarding");
+				}
+			} catch {
+				// network hiccup — fail open
+			}
+		}
+
+		checkOnboarding();
+		return () => {
+			cancelled = true;
+		};
+	}, [authLoading, user, router]);
+
 	function reconnectGmail() {
 		// Same entry point the Header uses for first-time connect — re-running
 		// consent issues a fresh refresh token and overwrites the dead one.

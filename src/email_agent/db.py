@@ -1,28 +1,43 @@
-"""SQLite storage for the email agent: runs, categorizations, and digests.
+"""Postgres storage for the email agent: runs, categorizations, and digests.
 
 We store our ANALYSIS of emails (category, reason, summary) but never the
 email content itself. Gmail remains the source of truth for email content.
+
+Migrated from SQLite to Postgres (psycopg 3). Key dialect differences handled:
+  - '?' placeholders  -> '%s'
+  - AUTOINCREMENT     -> GENERATED ALWAYS AS IDENTITY
+  - cursor.lastrowid  -> INSERT ... RETURNING id + fetchone()
+  - INSERT OR REPLACE -> INSERT ... ON CONFLICT (...) DO UPDATE
+  - PRAGMA migrations -> columns declared directly (fresh DB, no legacy rows)
+  - is_read INTEGER   -> BOOLEAN
+Timestamps stay TEXT (ISO strings) so the fixed-width string range queries in
+get_todays_digest keep working exactly as before.
 """
 
 import json
-import sqlite3
+import os
+
 from contextlib import contextmanager
+from collections.abc import Iterator
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
-import time
 
-from email_agent import config, crypto
+import psycopg
+from psycopg import Connection
+from psycopg.rows import dict_row, DictRow
+
+from email_agent import crypto
 
 
 @contextmanager
-def get_connection():
-    """Open a SQLite connection, yield it, and always close it.
+def get_connection() -> Iterator[Connection[DictRow]]:
+    """Open a Postgres connection, yield it, and always close it.
 
-    Using context manager to guarantee the connection closes even if an
-    error occurs mid-operation.
+    Yield type is annotated Connection[DictRow] so callers know every row is a
+    dict (row["col"] access). The # type: ignore covers psycopg's connect()
+    stub, which can't infer the row-factory switch — a known false positive.
     """
-    conn = sqlite3.connect(config.DB_PATH)
-    conn.row_factory = sqlite3.Row  # lets us access columns by name
+    conn: Connection[DictRow] = psycopg.connect(os.environ["DATABASE_URL"], row_factory=dict_row)  # type: ignore[arg-type]
     try:
         yield conn
         conn.commit()
@@ -65,11 +80,33 @@ def _local_day_bounds_utc(tz_name: str) -> tuple[str, str]:
 
 
 def init_db() -> None:
-    """Create the three tables if they don't already exist. Safe to call repeatedly."""
+    """Create all tables if they don't already exist. Safe to call repeatedly.
+
+    Table order matters in Postgres: a FOREIGN KEY can only reference a table
+    that already exists, so 'users' (referenced by almost everything) is
+    created first, then 'runs', then the rest.
+
+    Unlike the old SQLite version, columns like preferences/timezone are
+    declared directly here rather than added via PRAGMA-based migrations —
+    this is a fresh Postgres database with no legacy rows to migrate. When a
+    real schema change is needed later (after users exist), it will need a
+    proper ALTER TABLE migration, since dropping tables won't be an option.
+    """
     with get_connection() as conn:
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                email TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                preferences TEXT,
+                timezone TEXT
+            )
+            """)
+
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS runs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
                 user_id INTEGER NOT NULL,
                 run_at TEXT NOT NULL,
                 window_start TEXT NOT NULL,
@@ -80,7 +117,7 @@ def init_db() -> None:
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS email_categorizations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
                 user_id INTEGER NOT NULL,
                 run_id INTEGER NOT NULL,
                 gmail_id TEXT NOT NULL,
@@ -89,7 +126,7 @@ def init_db() -> None:
                 category TEXT NOT NULL,
                 reason TEXT,
                 summary TEXT,
-                is_read INTEGER NOT NULL DEFAULT 0,
+                is_read BOOLEAN NOT NULL DEFAULT FALSE,
                 categorized_at TEXT NOT NULL,
                 UNIQUE (user_id, gmail_id),
                 FOREIGN KEY (user_id) REFERENCES users (id),
@@ -99,34 +136,13 @@ def init_db() -> None:
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS digests (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
                 run_id INTEGER NOT NULL,
                 digest_text TEXT NOT NULL,
                 digest_json TEXT NOT NULL,
                 FOREIGN KEY (run_id) REFERENCES runs (id)
             )
             """)
-
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                email TEXT NOT NULL UNIQUE,
-                password_hash TEXT NOT NULL,
-                created_at TEXT NOT NULL
-            )
-            """)
-
-        # Migration: add preferences column to users if it doesn't exist yet.
-        # (Existing users get NULL until they set preferences.)
-        cols = conn.execute("PRAGMA table_info(users)").fetchall()
-        if not any(c["name"] == "preferences" for c in cols):
-            conn.execute("ALTER TABLE users ADD COLUMN preferences TEXT")
-
-        # Migration: add timezone column (IANA name, e.g. "America/Vancouver").
-        # The server needs this to know when a user's day starts — including
-        # for scheduled runs, where no browser is present to tell us.
-        if not any(c["name"] == "timezone" for c in cols):
-            conn.execute("ALTER TABLE users ADD COLUMN timezone TEXT")
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS sessions (
@@ -165,11 +181,16 @@ def record_run(user_id: int, window_start: str, emails_processed: int) -> int:
     run_at = datetime.now(timezone.utc).isoformat()
     with get_connection() as conn:
         cursor = conn.execute(
-            "INSERT INTO runs (user_id, run_at, window_start, emails_processed) VALUES (?, ?, ?, ?)",
+            """
+            INSERT INTO runs (user_id, run_at, window_start, emails_processed)
+            VALUES (%s, %s, %s, %s)
+            RETURNING id
+            """,
             (user_id, run_at, window_start, emails_processed),
         )
-        assert cursor.lastrowid is not None
-        return cursor.lastrowid
+        row = cursor.fetchone()
+        assert row is not None
+        return row["id"]
 
 
 def save_categorization(
@@ -195,8 +216,8 @@ def save_categorization(
             INSERT INTO email_categorizations
                 (user_id, run_id, gmail_id, sender, subject,
                  category, reason, summary, is_read, categorized_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
-            ON CONFLICT(user_id, gmail_id) DO NOTHING
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, FALSE, %s)
+            ON CONFLICT (user_id, gmail_id) DO NOTHING
             """,
             (
                 user_id,
@@ -222,15 +243,15 @@ def get_known_gmail_ids(user_id: int, gmail_ids: list[str]) -> set[str]:
     if not gmail_ids:
         return set()
 
-    # One '?' per id. The placeholders are generated from the list's LENGTH,
+    # One '%s' per id. The placeholders are generated from the list's LENGTH,
     # never from its contents — so this is not SQL injection; the values still
     # go through parameter binding below.
-    placeholders = ",".join("?" for _ in gmail_ids)
+    placeholders = ",".join("%s" for _ in gmail_ids)
     with get_connection() as conn:
         rows = conn.execute(
             f"""
             SELECT gmail_id FROM email_categorizations
-            WHERE user_id = ? AND gmail_id IN ({placeholders})
+            WHERE user_id = %s AND gmail_id IN ({placeholders})
             """,
             (user_id, *gmail_ids),
         ).fetchall()
@@ -246,7 +267,7 @@ def save_digest(run_id: int, digest_text: str, digest_data: dict) -> None:
     digest_json = json.dumps(digest_data)
     with get_connection() as conn:
         conn.execute(
-            "INSERT INTO digests (run_id, digest_text, digest_json) VALUES (?, ?, ?)",
+            "INSERT INTO digests (run_id, digest_text, digest_json) VALUES (%s, %s, %s)",
             (run_id, digest_text, digest_json),
         )
 
@@ -255,7 +276,7 @@ def get_last_run_time(user_id: int) -> str | None:
     """Return the run_at of the user's most recent run, or None if none yet."""
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT run_at FROM runs WHERE user_id = ? ORDER BY id DESC LIMIT 1",
+            "SELECT run_at FROM runs WHERE user_id = %s ORDER BY id DESC LIMIT 1",
             (user_id,),
         ).fetchone()
         return row["run_at"] if row else None
@@ -275,9 +296,9 @@ def get_todays_digest(user_id: int) -> dict | None:
             """
             SELECT gmail_id, sender, subject, category, reason, summary, is_read
             FROM email_categorizations
-            WHERE user_id = ?
-              AND categorized_at >= ?
-              AND categorized_at <  ?
+            WHERE user_id = %s
+              AND categorized_at >= %s
+              AND categorized_at <  %s
             ORDER BY categorized_at DESC, id DESC
             """,
             (user_id, start_utc, end_utc),
@@ -316,8 +337,8 @@ def mark_email_read(user_id: int, gmail_id: str) -> bool:
         cursor = conn.execute(
             """
             UPDATE email_categorizations
-            SET is_read = 1
-            WHERE user_id = ? AND gmail_id = ?
+            SET is_read = TRUE
+            WHERE user_id = %s AND gmail_id = %s
             """,
             (user_id, gmail_id),
         )
@@ -328,7 +349,7 @@ def get_user_timezone(user_id: int) -> str:
     """Return the user's IANA timezone, defaulting to UTC if unset."""
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT timezone FROM users WHERE id = ?", (user_id,)
+            "SELECT timezone FROM users WHERE id = %s", (user_id,)
         ).fetchone()
     if row is None or not row["timezone"]:
         return "UTC"
@@ -357,7 +378,7 @@ def get_daily_analytics(user_id: int) -> list[dict]:
             """
             SELECT category, categorized_at
             FROM email_categorizations
-            WHERE user_id = ?
+            WHERE user_id = %s
             """,
             (user_id,),
         ).fetchall()
@@ -389,18 +410,23 @@ def create_user(email: str, password_hash: str, tz: str = "UTC") -> int:
     created_at = _utc_now_iso()
     with get_connection() as conn:
         cursor = conn.execute(
-            "INSERT INTO users (email, password_hash, created_at, timezone) VALUES (?, ?, ?, ?)",
+            """
+            INSERT INTO users (email, password_hash, created_at, timezone)
+            VALUES (%s, %s, %s, %s)
+            RETURNING id
+            """,
             (email, password_hash, created_at, tz),
         )
-        assert cursor.lastrowid is not None
-        return cursor.lastrowid
+        row = cursor.fetchone()
+        assert row is not None
+        return row["id"]
 
 
 def get_user_by_email(email: str) -> dict | None:
     """Find a user by email. Returns a dict with id, email, password_hash — or None."""
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT id, email, password_hash FROM users WHERE email = ?",
+            "SELECT id, email, password_hash FROM users WHERE email = %s",
             (email,),
         ).fetchone()
         return dict(row) if row else None
@@ -410,7 +436,7 @@ def get_user_by_id(user_id: int) -> dict | None:
     """Find a user by id. Returns a dict with id, email — or None."""
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT id, email FROM users WHERE id = ?",
+            "SELECT id, email FROM users WHERE id = %s",
             (user_id,),
         ).fetchone()
         return dict(row) if row else None
@@ -425,7 +451,7 @@ def save_user_preferences(user_id: int, preferences: dict) -> None:
     preferences_json = json.dumps(preferences)
     with get_connection() as conn:
         conn.execute(
-            "UPDATE users SET preferences = ? WHERE id = ?",
+            "UPDATE users SET preferences = %s WHERE id = %s",
             (preferences_json, user_id),
         )
 
@@ -434,7 +460,7 @@ def get_user_preferences(user_id: int) -> dict | None:
     """Load a user's categorization preferences, or None if not set yet."""
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT preferences FROM users WHERE id = ?",
+            "SELECT preferences FROM users WHERE id = %s",
             (user_id,),
         ).fetchone()
     if row is None or row["preferences"] is None:
@@ -453,6 +479,11 @@ def save_gmail_connection(
 
     Takes PLAINTEXT tokens and encrypts them here — the db layer is the single
     guardian ensuring tokens are never stored unencrypted.
+
+    Uses INSERT ... ON CONFLICT (user_id) DO UPDATE (Postgres's upsert) to
+    replace SQLite's INSERT OR REPLACE: on reconnect, the existing row is
+    updated in place rather than deleted-and-reinserted. EXCLUDED refers to
+    the row that would have been inserted.
     """
     access_encrypted = crypto.encrypt_token(access_token)
     refresh_encrypted = crypto.encrypt_token(refresh_token)
@@ -461,10 +492,16 @@ def save_gmail_connection(
     with get_connection() as conn:
         conn.execute(
             """
-            INSERT OR REPLACE INTO gmail_connections
+            INSERT INTO gmail_connections
                 (user_id, google_email, access_token_encrypted,
                  refresh_token_encrypted, token_expiry, connected_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (user_id) DO UPDATE SET
+                google_email = EXCLUDED.google_email,
+                access_token_encrypted = EXCLUDED.access_token_encrypted,
+                refresh_token_encrypted = EXCLUDED.refresh_token_encrypted,
+                token_expiry = EXCLUDED.token_expiry,
+                connected_at = EXCLUDED.connected_at
             """,
             (
                 user_id,
@@ -485,7 +522,7 @@ def get_gmail_connection(user_id: int) -> dict | None:
     """
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT * FROM gmail_connections WHERE user_id = ?",
+            "SELECT * FROM gmail_connections WHERE user_id = %s",
             (user_id,),
         ).fetchone()
 
@@ -502,12 +539,12 @@ def get_gmail_connection(user_id: int) -> dict | None:
     }
 
 
-def save_oauth_state(state: str, user_id: str) -> None:
+def save_oauth_state(state: str, user_id: int) -> None:
     """Store a pending OAuth state (CSRF ticket) for a user."""
     created_at = datetime.now(timezone.utc).isoformat()
     with get_connection() as conn:
         conn.execute(
-            "INSERT INTO oauth_states (state, user_id, created_at) VALUES (?, ?, ?)",
+            "INSERT INTO oauth_states (state, user_id, created_at) VALUES (%s, %s, %s)",
             (state, user_id, created_at),
         )
 
@@ -516,7 +553,7 @@ def get_oauth_state(state: str) -> dict | None:
     """Look up a pending OAuth state. Returns {user_id, created_at} or None"""
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT user_id, created_at FROM oauth_states WHERE state =?",
+            "SELECT user_id, created_at FROM oauth_states WHERE state = %s",
             (state,),
         ).fetchone()
         return dict(row) if row else None
@@ -525,4 +562,4 @@ def get_oauth_state(state: str) -> dict | None:
 def delete_oauth_state(state: str) -> None:
     """Delete a used OAuth state (one-time use)."""
     with get_connection() as conn:
-        conn.execute("DELETE FROM oauth_states WHERE state = ?", (state,))
+        conn.execute("DELETE FROM oauth_states WHERE state = %s", (state,))

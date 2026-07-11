@@ -34,7 +34,7 @@ def create_session(user_id: int) -> str:
         conn.execute(
             """
             INSERT INTO sessions (id, user_id, created_at, expires_at)
-            VALUES (?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s)
             """,
             (token, user_id, now.isoformat(), expires.isoformat()),
         )
@@ -45,7 +45,7 @@ def get_session_user(token: str) -> int | None:
     """Given a session token, return the user_id it belongs to."""
     with db.get_connection() as conn:
         row = conn.execute(
-            "SELECT user_id, expires_at FROM sessions WHERE id = ?",
+            "SELECT user_id, expires_at FROM sessions WHERE id = %s",
             (token,),
         ).fetchone()
 
@@ -62,4 +62,4 @@ def get_session_user(token: str) -> int | None:
 def delete_session(token: str) -> None:
     """Delete a session (logout). Safe to call even if it doesn't exist."""
     with db.get_connection() as conn:
-        conn.execute("DELETE FROM sessions WHERE id = ?", (token,))
+        conn.execute("DELETE FROM sessions WHERE id = %s", (token,))
