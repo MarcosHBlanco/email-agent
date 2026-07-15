@@ -15,6 +15,7 @@ from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from zoneinfo import ZoneInfo  # or hoist to module imports
 from contextlib import asynccontextmanager
+from typing import Literal
 
 from dotenv import load_dotenv
 
@@ -33,6 +34,15 @@ BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:8000")
 REDIRECT_URI = f"{BACKEND_URL}/auth/gmail/callback"
 
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+
+# Cookie policy depends on whether the frontend and backend are same-site.
+# Locally both are localhost -> same-site, so Lax works and Secure would
+# break (localhost is http). In production they're on different domains
+# (vercel.app vs onrender.com) -> CROSS-site, so the browser only sends the
+# cookie if SameSite=None, which in turn REQUIRES Secure.
+IS_PRODUCTION = FRONTEND_URL.startswith("https://")
+COOKIE_SAMESITE: Literal["lax", "none"] = "none" if IS_PRODUCTION else "lax"
+COOKIE_SECURE = IS_PRODUCTION
 
 # The client config the Google Flow object expects (built from env vars,
 # rather than a credentials.json file, so secrets stay in .env).
@@ -246,8 +256,9 @@ def signup(body: AuthRequest, response: Response) -> dict:
         key="session",
         value=token,
         httponly=True,
-        samesite="lax",
-        max_age=60 * 60 * 24 * 30,  # 30 days in seconds
+        samesite=COOKIE_SAMESITE,
+        secure=COOKIE_SECURE,
+        max_age=60 * 60 * 24 * 30,
     )
     return {"id": user_id, "email": body.email}
 
@@ -266,7 +277,8 @@ def login(body: AuthRequest, response: Response) -> dict:
         key="session",
         value=token,
         httponly=True,
-        samesite="lax",
+        samesite=COOKIE_SAMESITE,
+        secure=COOKIE_SECURE,
         max_age=60 * 60 * 24 * 30,
     )
     return {"id": user["id"], "email": user["email"]}
@@ -277,7 +289,11 @@ def logout(response: Response, session: str | None = Cookie(default=None)) -> di
     """Log out: delete the session and clear the cookie."""
     if session is not None:
         auth.delete_session(session)
-    response.delete_cookie(key="session")
+    response.delete_cookie(
+        key="session",
+        samesite=COOKIE_SAMESITE,
+        secure=COOKIE_SECURE,
+    )
     return {"ok": True}
 
 
