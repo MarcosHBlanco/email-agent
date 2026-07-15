@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 
-const API_BASE = "http://localhost:8000";
+import { API_BASE } from "@/lib/config";
 
 type Preferences = {
 	profession: string;

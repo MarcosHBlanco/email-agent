@@ -29,7 +29,8 @@ load_dotenv()  # load .env before anything reads env vars
 
 GOOGLE_CLIENT_ID = os.environ["GOOGLE_CLIENT_ID"]
 GOOGLE_CLIENT_SECRET = os.environ["GOOGLE_CLIENT_SECRET"]
-REDIRECT_URI = "http://localhost:8000/auth/gmail/callback"
+BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:8000")
+REDIRECT_URI = f"{BACKEND_URL}/auth/gmail/callback"
 
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
 
@@ -92,7 +93,7 @@ def get_current_user(session: str | None = Cookie(default=None)) -> dict:
 # Allow the frontend (different origin/port) to call this API.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[FRONTEND_URL],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

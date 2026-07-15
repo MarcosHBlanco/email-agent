@@ -5,6 +5,8 @@ import { useTheme } from "@/components/ThemeProvider";
 import { useAuth } from "@/components/AuthProvider";
 import { useRouter } from "next/navigation";
 
+import { API_BASE } from "@/lib/config";
+
 export default function Header() {
 	const { theme, toggleTheme } = useTheme();
 	const [mounted, setMounted] = useState(false);
@@ -17,7 +19,7 @@ export default function Header() {
 		let cancelled = false;
 		async function loadGmailStatus() {
 			try {
-				const res = await fetch("http://localhost:8000/auth/gmail/status", {
+				const res = await fetch(`${API_BASE}/auth/gmail/status`, {
 					credentials: "include",
 				});
 				if (!res.ok) return;
@@ -34,7 +36,7 @@ export default function Header() {
 	}, []);
 
 	function connectGmail() {
-		window.location.href = "http://localhost:8000/auth/gmail/connect";
+		window.location.href = `${API_BASE}/auth/gmail/connect`;
 	}
 
 	const { user, logout } = useAuth();

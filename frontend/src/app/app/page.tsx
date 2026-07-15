@@ -16,7 +16,7 @@ import Charts from "@/components/Charts";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 
-const API_BASE = "http://localhost:8000";
+import { API_BASE } from "@/lib/config";
 
 type CategoryFilter = "ALL" | "IMPORTANT" | "ROUTINE" | "JUNK";
 type MobileView = "categories" | "list" | "detail";
