@@ -359,7 +359,8 @@ export default function LandingPage() {
 					</a>
 				</div>
 				<p className="hero-note">
-					Connects to Gmail · Read-only · Your email content is never stored
+					Connects to Gmail · You're in control · Your email content is never
+					stored
 				</p>
 
 				{/* SIGNATURE: the sifting demo */}
@@ -451,8 +452,9 @@ export default function LandingPage() {
 						<span className="step-num">01</span>
 						<h3>Connect your Gmail</h3>
 						<p>
-							One secure click through Google. Sift gets read-only access — it
-							can see your mail, never send, delete, or change anything.
+							One secure click through Google. Sift connects to your inbox — and
+							only ever acts when you ask it to. Nothing is sent, deleted, or
+							changed on its own.
 						</p>
 					</div>
 					<div className="step reveal">
@@ -641,9 +643,9 @@ export default function LandingPage() {
 								lineHeight: "1.6",
 							}}
 						>
-							Your Gmail connects through Google's own OAuth. Read-only access,
-							encrypted credentials, and you can disconnect in one click, any
-							time.
+							Your Gmail connects through Google's own OAuth. Encrypted
+							credentials, actions only ever taken at your request, and you can
+							disconnect in one click, any time.
 						</p>
 					</div>
 					<div
@@ -733,10 +735,11 @@ export default function LandingPage() {
 							<div className="pp">
 								<span className="pp-check">✓</span>
 								<span className="pp-text">
-									<strong>Read-only, always</strong>
+									<strong>Nothing happens without you</strong>
 									<span>
-										Sift can't send, delete, or edit your mail. The access it
-										asks for is the least it needs — nothing more.
+										Sift never sends, deletes, or changes anything on its own.
+										Any action on your mail happens only when you ask for it —
+										never automatically, never in the background.
 									</span>
 								</span>
 							</div>
