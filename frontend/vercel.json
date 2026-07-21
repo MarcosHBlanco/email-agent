@@ -1,0 +1,8 @@
+{
+	"rewrites": [
+		{
+			"source": "/api/:path*",
+			"destination": "https://sift-api-sxg1.onrender.com/:path*"
+		}
+	]
+}
