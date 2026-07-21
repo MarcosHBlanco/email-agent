@@ -39,10 +39,10 @@ export default function EmailList({
 					<section key={category} className="py-2">
 						<div className="flex items-center gap-2 px-3 py-1.5">
 							<span className={`h-2 w-2 rounded-full ${DOT_COLOR[category]}`} />
-							<h2 className="text-xs font-semibold uppercase tracking-wide text-ink-soft">
+							<h2 className="font-mono text-xs font-medium uppercase tracking-wider text-ink-soft">
 								{category}
 							</h2>
-							<span className="text-xs tabular-nums text-ink-faint">
+							<span className="font-mono text-xs tabular-nums text-ink-faint">
 								{unread > 0 ? `${unread}/${items.length}` : items.length}
 							</span>
 						</div>

@@ -132,7 +132,7 @@ export default function Rail({
 					onClick={onProcess}
 					disabled={processing}
 					whileTap={{ scale: 0.97 }}
-					className="w-full rounded-md bg-accent px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+					className="w-full rounded-lg bg-accent px-3 py-2.5 text-sm font-semibold text-white shadow-[0_4px_20px_-2px_var(--color-accent)] transition-all hover:-translate-y-0.5 hover:bg-accent-hover hover:shadow-[0_6px_28px_-2px_var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:shadow-[0_4px_20px_-2px_var(--color-accent)]"
 				>
 					{processing ? "Processing…" : "Process new emails"}
 				</motion.button>

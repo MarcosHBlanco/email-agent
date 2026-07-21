@@ -35,27 +35,27 @@
 
 /* ===== DARK THEME (when .dark is on <html>) ===== */
 .dark {
-	--color-canvas: #100e17; /* purple-tinted near-black */
-	--color-surface: #1a1722; /* lifted dark surface */
-	--color-surface-hover: #221d2e; /* hover, slightly lighter */
-	--color-border: #2a2536; /* subtle borders on dark */
-	--color-border-strong: #3a3447;
+	--color-canvas: #0a0f1e; /* navy near-black — matches landing page */
+	--color-surface: #111830; /* lifted navy surface */
+	--color-surface-hover: #141c38; /* hover, slightly lighter navy */
+	--color-border: #26304f; /* subtle navy borders */
+	--color-border-strong: #2b3760;
 
-	--color-ink: #ece9f1; /* primary text (near-white, warm) */
-	--color-ink-soft: #a7a1b4; /* secondary */
+	--color-ink: #eef2fb; /* primary text (near-white, warm) */
+	--color-ink-soft: #a7b2ce; /* secondary */
 	--color-ink-faint: #6e6880; /* tertiary / metadata */
 
 	--color-accent: #7c78ff; /* brightened indigo — glows on dark */
 	--color-accent-hover: #938ffe;
-	--color-accent-soft: #211d3a; /* dark violet tint for selection bg */
+	--color-accent-soft: #6d7799; /* dark violet tint for selection bg */
 
-	--color-important: #f470a5; /* your pink — warm, attention */
+	--color-important: #e08bb4; /* your pink — warm, attention */
 	--color-important-soft: #2e1a26; /* dark rose tint */
 
-	--color-routine: #6f97e3; /* brighter blue for dark */
+	--color-routine: #5a9bd8; /* brighter blue for dark */
 	--color-routine-soft: #18223a;
 
-	--color-junk: #6e6880; /* muted gray */
+	--color-junk: #5a6488; /* muted gray */
 	--color-junk-soft: #201d29;
 
 	--color-support-1: #a06bfb;
@@ -105,6 +105,5 @@ button:not(:disabled) {
 	cursor: pointer;
 }
 
-@media(width > 768px){
-	
+@media (width > 768px) {
 }

@@ -59,10 +59,10 @@ export default function Header() {
 		<header className="flex items-center justify-between border-b border-border px-4 py-3 md:px-6">
 			{/* Left — app identity + welcome */}
 			<div className="flex flex-col">
-				<h1 className="text-sm font-semibold leading-tight text-ink">
-					Email Agent
+				<h1 className="font-serif text-lg font-semibold leading-tight tracking-tight text-ink">
+					Sift
 				</h1>
-				<p className="text-xs text-ink-faint">
+				<p className="font-mono text-xs text-ink-faint">
 					{user ? user.email : "Welcome"}
 				</p>
 			</div>

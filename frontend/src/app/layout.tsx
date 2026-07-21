@@ -1,22 +1,30 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Fraunces, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AuthProvider } from "@/components/AuthProvider";
 
-const geistSans = Geist({
-	variable: "--font-geist-sans",
+const fraunces = Fraunces({
+	variable: "--font-display",
 	subsets: ["latin"],
+	display: "swap",
 });
 
-const geistMono = Geist_Mono({
-	variable: "--font-geist-mono",
+const inter = Inter({
+	variable: "--font-sans",
 	subsets: ["latin"],
+	display: "swap",
+});
+
+const jetbrainsMono = JetBrains_Mono({
+	variable: "--font-mono",
+	subsets: ["latin"],
+	display: "swap",
 });
 
 export const metadata: Metadata = {
-	title: "Email Agent",
-	description: "AI-powered email triage",
+	title: "Sift",
+	description: "See what matters. Sift the rest.",
 };
 
 export default function RootLayout({
@@ -27,7 +35,7 @@ export default function RootLayout({
 	return (
 		<html
 			lang="en"
-			className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+			className={`${fraunces.variable} ${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
 		>
 			<body className="min-h-full flex flex-col">
 				<ThemeProvider>

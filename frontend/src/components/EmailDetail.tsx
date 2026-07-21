@@ -157,7 +157,7 @@ function EmailContent({
 				>
 					{style.label}
 				</span>
-				<h2 className="mt-2 text-lg font-semibold leading-snug text-ink">
+				<h2 className="mt-2 font-serif text-xl font-semibold leading-snug tracking-tight text-ink">
 					{email.subject}
 				</h2>
 				<p className="mt-1 text-sm text-ink-soft">{email.sender}</p>
@@ -165,13 +165,13 @@ function EmailContent({
 
 			<div className="flex-1 overflow-y-auto px-6 py-5">
 				<section className="mb-6">
-					<h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-faint">
+					<h3 className="mb-1.5 font-mono text-xs font-medium uppercase tracking-wider text-ink-faint">
 						Summary
 					</h3>
 					<p className="text-sm leading-relaxed text-ink">{email.summary}</p>
 				</section>
 				<section>
-					<h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-faint">
+					<h3 className="mb-1.5 font-mono text-xs font-medium uppercase tracking-wider text-ink-faint">
 						Why this category
 					</h3>
 					<p className="text-sm leading-relaxed text-ink-soft">
