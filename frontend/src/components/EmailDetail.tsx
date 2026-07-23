@@ -1,6 +1,9 @@
+import { useState, useEffect } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import DOMPurify from "dompurify";
 import { Digest, EmailItem, findEmailById } from "@/types";
 import { fadeInUp, transition } from "@/lib/motion";
+import { API_BASE } from "@/lib/config";
 
 interface EmailDetailProps {
 	digest: Digest;
@@ -178,6 +181,12 @@ function EmailContent({
 						{email.reason}
 					</p>
 				</section>
+				<section className="mt-6 border-t border-border pt-5">
+					<h3 className="mb-3 font-mono text-xs font-medium uppercase tracking-wider text-ink-faint">
+						Message
+					</h3>
+					<EmailBody key={email.gmail_id} gmailId={email.gmail_id} />
+				</section>
 			</div>
 
 			<div className="border-t border-border px-6 py-3">
@@ -205,4 +214,107 @@ function EmailContent({
 			</div>
 		</div>
 	);
+}
+
+/* ---- Email body: fetched on demand, sanitized, rendered ---- */
+
+// DOMPurify hooks are global, so register once. Guarded against SSR since
+// DOMPurify needs a real DOM (window) to exist.
+let hooksRegistered = false;
+function ensureHooks() {
+	if (hooksRegistered || typeof window === "undefined") return;
+	DOMPurify.addHook("afterSanitizeAttributes", (node) => {
+		// Force links to open in a new tab — otherwise clicking a link in an
+		// email navigates away from Sift entirely. rel=noopener prevents the
+		// opened page from getting a handle back to our window.
+		if (node.tagName === "A") {
+			node.setAttribute("target", "_blank");
+			node.setAttribute("rel", "noopener noreferrer");
+		}
+	});
+	hooksRegistered = true;
+}
+
+type BodyState = {
+	html: string | null; // already sanitized
+	plain: string | null;
+};
+
+function EmailBody({ gmailId }: { gmailId: string }) {
+	const [body, setBody] = useState<BodyState | null>(null);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+
+	useEffect(() => {
+		let cancelled = false;
+
+		async function load() {
+			try {
+				const res = await fetch(
+					`${API_BASE}/emails/${encodeURIComponent(gmailId)}/body`,
+					{ credentials: "include" },
+				);
+				if (!res.ok) throw new Error("Couldn't load this message");
+				const data = await res.json();
+				if (cancelled) return;
+
+				// Sanitize ONCE here, at fetch time — not on every render. The
+				// output of this is the only thing that ever reaches
+				// dangerouslySetInnerHTML.
+				let cleanHtml: string | null = null;
+				if (data.html) {
+					ensureHooks();
+					cleanHtml = DOMPurify.sanitize(data.html, {
+						// Strip <style> blocks: CSS inside them is GLOBAL and would
+						// restyle the whole app. Inline style="" attributes are kept —
+						// they can only affect their own element. This is also what
+						// Gmail and Outlook do, which is why marketing email uses
+						// inline styles everywhere.
+						FORBID_TAGS: ["style"],
+					});
+				}
+				setBody({ html: cleanHtml, plain: data.plain ?? null });
+			} catch {
+				if (!cancelled) setError("Couldn't load this message");
+			} finally {
+				if (!cancelled) setLoading(false);
+			}
+		}
+
+		load();
+		return () => {
+			cancelled = true;
+		};
+	}, [gmailId]);
+
+	if (loading) {
+		return <p className="text-sm text-ink-faint">Loading message…</p>;
+	}
+
+	if (error) {
+		return (
+			<p className="text-sm text-ink-faint">
+				{error}. The summary above is still available.
+			</p>
+		);
+	}
+
+	if (body?.html) {
+		return (
+			<div
+				className="email-body overflow-x-auto text-sm leading-relaxed text-ink"
+				dangerouslySetInnerHTML={{ __html: body.html }}
+			/>
+		);
+	}
+
+	if (body?.plain) {
+		return (
+			<p className="whitespace-pre-wrap text-sm leading-relaxed text-ink">
+				{body.plain}
+			</p>
+		);
+	}
+
+	return <p className="text-sm text-ink-faint">No readable content.</p>;
 }

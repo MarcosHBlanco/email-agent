@@ -107,3 +107,13 @@ button:not(:disabled) {
 
 @media (width > 768px) {
 }
+
+/* Rendered email bodies: constrain foreign content so wide tables and
+   images can't break the app layout. */
+.email-body img {
+	max-width: 100%;
+	height: auto;
+}
+.email-body table {
+	max-width: 100%;
+}
