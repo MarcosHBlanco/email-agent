@@ -23,6 +23,8 @@ from email_agent.gmail_client import (
     GmailNotConnectedError,
     GmailReauthError,
     SCOPES as GMAIL_SCOPES,
+    fetch_email_body,
+    get_email_service,
 )
 from email_agent import personas
 
@@ -166,6 +168,35 @@ def mark_email_read(gmail_id: str, user: dict = Depends(get_current_user)) -> di
     if not ok:
         raise HTTPException(status_code=404, detail="Email not found")
     return {"ok": True}
+
+
+@app.get("/emails/{gmail_id}/body")
+def get_email_body(gmail_id: str, user: dict = Depends(get_current_user)) -> dict:
+    """Fetch one email's full content from Gmail, on demand.
+
+    Nothing is stored — we fetch, return, and forget. Gmail stays the single
+    source of truth for email content.
+    """
+    try:
+        service = get_email_service(user["id"])
+        body = fetch_email_body(service, gmail_id)
+    except GmailNotConnectedError:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "gmail_not_connected",
+                "message": "No Gmail account connected. Please connect your Gmail first.",
+            },
+        )
+    except GmailReauthError:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "gmail_reauth_required",
+                "message": "Your Gmail connection expired. Please reconnect to continue.",
+            },
+        )
+    return body
 
 
 @app.get("/analytics/daily")

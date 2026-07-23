@@ -1,6 +1,7 @@
 """Gmail client. Handles OAuth authentication and email fetching."""
 
 import os
+import base64
 
 from datetime import datetime, timedelta, timezone
 from os import access
@@ -128,6 +129,72 @@ def _simplify_email(raw_email: dict) -> dict:
         "id": raw_email["id"],
         "thread_id": raw_email.get("threadId"),
         "snippet": raw_email.get("snippet", ""),
+        "subject": headers.get("subject", "(no subject)"),
+        "sender": headers.get("from", "(unknown sender)"),
+        "date": headers.get("date", ""),
+    }
+
+
+def _decode_body_data(data: str) -> str:
+    """Decode Gmail's base64url-encoded body data.
+
+    Gmail uses the URL-safe base64 alphabet and omits trailing '=' padding.
+    Python's decoder requires padding, so we recompute it: base64 works in
+    4-character blocks, so we add however many '=' brings the length to a
+    multiple of 4.
+    """
+    padding = "=" * (-len(data) % 4)
+    return base64.urlsafe_b64decode(data + padding).decode("utf-8", errors="replace")
+
+
+def _walk_parts(part: dict, found: dict) -> None:
+    """Recursively descend the MIME tree, collecting the first text bodies found.
+
+    A Gmail payload is a tree: the text you want may be at the top level, or
+    nested one or more levels down inside multipart containers (which is what
+    happens whenever there are attachments or inline images). So we walk the
+    whole tree rather than assuming a fixed shape.
+
+    Mutates `found` in place — {"plain": str|None, "html": str|None}.
+    """
+    mime_type = part.get("mimeType", "")
+    data = part.get("body", {}).get("data")
+
+    if data:
+        if mime_type == "text/plain" and found["plain"] is None:
+            found["plain"] = _decode_body_data(data)
+        elif mime_type == "text/html" and found["html"] is None:
+            found["html"] = _decode_body_data(data)
+
+    for sub_part in part.get("parts", []) or []:
+        _walk_parts(sub_part, found)
+
+
+def fetch_email_body(service: Any, gmail_id: str) -> dict:
+    """Fetch ONE email's full content from Gmail, on demand.
+
+    Nothing here is persisted: we ask Gmail for the message, hand it to the
+    caller, and forget it. Gmail remains the single source of truth for email
+    content — this is a window onto it, opened only when the user asks.
+
+    Returns {"html": str|None, "plain": str|None, "subject", "sender", "date"}.
+    """
+    message = (
+        service.users()
+        .messages()
+        .get(userId="me", id=gmail_id, format="full")
+        .execute()
+    )
+
+    payload = message.get("payload", {})
+    found = {"plain": None, "html": None}
+    _walk_parts(payload, found)
+
+    headers = {h["name"].lower(): h["value"] for h in payload.get("headers", [])}
+
+    return {
+        "html": found["html"],
+        "plain": found["plain"],
         "subject": headers.get("subject", "(no subject)"),
         "sender": headers.get("from", "(unknown sender)"),
         "date": headers.get("date", ""),
