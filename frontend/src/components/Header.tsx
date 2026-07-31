@@ -10,36 +10,12 @@ import { API_BASE } from "@/lib/config";
 export default function Header() {
 	const { theme, toggleTheme } = useTheme();
 	const [mounted, setMounted] = useState(false);
-	const [gmail, setGmail] = useState<{
-		connected: boolean;
-		email: string | null;
-	} | null>(null);
-
-	useEffect(() => {
-		let cancelled = false;
-		async function loadGmailStatus() {
-			try {
-				const res = await fetch(`${API_BASE}/auth/gmail/status`, {
-					credentials: "include",
-				});
-				if (!res.ok) return;
-				const data = await res.json();
-				if (!cancelled) setGmail(data);
-			} catch {
-				// non-critical; leave null}
-			}
-		}
-		loadGmailStatus();
-		return () => {
-			cancelled = true;
-		};
-	}, []);
 
 	function connectGmail() {
 		window.location.href = `${API_BASE}/auth/gmail/connect`;
 	}
 
-	const { user, logout } = useAuth();
+	const { user, gmail, logout } = useAuth();
 	const router = useRouter();
 
 	async function handleLogout() {

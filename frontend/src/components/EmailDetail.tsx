@@ -4,6 +4,7 @@ import DOMPurify from "dompurify";
 import { Digest, EmailItem, findEmailById } from "@/types";
 import { fadeInUp, transition } from "@/lib/motion";
 import { API_BASE } from "@/lib/config";
+import { useAuth } from "./AuthProvider";
 
 interface EmailDetailProps {
 	digest: Digest;
@@ -152,6 +153,10 @@ function EmailContent({
 	category: Category;
 }) {
 	const style = CATEGORY_STYLE[category];
+	const { gmail } = useAuth();
+	// Use the connected account so the link opens the right mailbox. Falls back
+	// to "0" (first signed-in Google account) only if status hasn't loaded yet.
+	const gmailAccount = gmail?.email ?? "0";
 	return (
 		<div className="flex h-full flex-col">
 			<div className="border-b border-border px-6 py-4">
@@ -203,12 +208,19 @@ function EmailContent({
 					>
 						Delete
 					</button>
-					<button
-						disabled
-						className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-faint cursor-not-allowed"
+					{/* u/0 = first signed-in Google account. Gmail has no URL form
+									    that both targets a specific account AND deep-links a message:
+									    u/{email} 404s, and ?authuser= opens the mailbox but drops the
+									    #all/{id} fragment. So multi-account users may land on the
+									    wrong mailbox. Verified empirically. */}
+					<a
+						href={`https://mail.google.com/mail/u/0/#all/${email.gmail_id}`}
+						target="_blank"
+						rel="noopener noreferrer"
+						className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-soft transition-colors hover:border-accent hover:text-ink"
 					>
 						Open in Gmail
-					</button>
+					</a>
 				</div>
 				<p className="mt-2 text-xs text-ink-faint">Actions coming soon</p>
 			</div>
