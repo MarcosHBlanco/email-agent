@@ -10,6 +10,7 @@ interface EmailDetailProps {
 	digest: Digest;
 	selectedEmailId: string | null;
 	processing: boolean;
+	onDelete: (gmailId: string) => void;
 }
 
 type Category = "IMPORTANT" | "ROUTINE" | "JUNK";
@@ -31,6 +32,7 @@ export default function EmailDetail({
 	digest,
 	selectedEmailId,
 	processing,
+	onDelete,
 }: EmailDetailProps) {
 	const found =
 		selectedEmailId !== null ? findEmailById(digest, selectedEmailId) : null;
@@ -55,7 +57,11 @@ export default function EmailDetail({
 				) : found === null ? (
 					<NotFoundState />
 				) : (
-					<EmailContent email={found.email} category={found.category} />
+					<EmailContent
+						email={found.email}
+						category={found.category}
+						onDelete={onDelete}
+					/>
 				)}
 			</motion.div>
 		</AnimatePresence>
@@ -148,9 +154,11 @@ function ProcessingState() {
 function EmailContent({
 	email,
 	category,
+	onDelete,
 }: {
 	email: EmailItem;
 	category: Category;
+	onDelete: (gmailId: string) => void;
 }) {
 	const style = CATEGORY_STYLE[category];
 	const { gmail } = useAuth();
@@ -203,10 +211,10 @@ function EmailContent({
 						Reply
 					</button>
 					<button
-						disabled
-						className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-faint cursor-not-allowed"
+						onClick={() => onDelete(email.gmail_id)}
+						className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-soft transition-colors hover:border-important hover:text-important"
 					>
-						Delete
+						Trash
 					</button>
 					{/* u/0 = first signed-in Google account. Gmail has no URL form
 									    that both targets a specific account AND deep-links a message:
@@ -222,7 +230,7 @@ function EmailContent({
 						Open in Gmail
 					</a>
 				</div>
-				<p className="mt-2 text-xs text-ink-faint">Actions coming soon</p>
+				<p className="mt-2 text-xs text-ink-faint">Reply coming soon</p>
 			</div>
 		</div>
 	);

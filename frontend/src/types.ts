@@ -59,3 +59,43 @@ export function markEmailReadInDigest(digest: Digest, gmailId: string): Digest {
 	}
 	return { ...digest, buckets };
 }
+
+// Remove an email from the digest. Returns the new digest plus the removed
+// email's category and index, so undo can put it back exactly where it was.
+export function removeEmailFromDigest(
+	digest: Digest,
+	gmailId: string,
+): { digest: Digest; category: keyof DigestBuckets; index: number } | null {
+	const categories: (keyof DigestBuckets)[] = ["IMPORTANT", "ROUTINE", "JUNK"];
+	for (const category of categories) {
+		const index = digest.buckets[category].findIndex(
+			(e) => e.gmail_id === gmailId,
+		);
+		if (index === -1) continue;
+
+		const buckets = { ...digest.buckets };
+		buckets[category] = digest.buckets[category].filter(
+			(e) => e.gmail_id !== gmailId,
+		);
+		return {
+			digest: { ...digest, buckets, total: digest.total - 1 },
+			category,
+			index,
+		};
+	}
+	return null;
+}
+
+// Put an email back at its original position (undo).
+export function restoreEmailToDigest(
+	digest: Digest,
+	email: EmailItem,
+	category: keyof DigestBuckets,
+	index: number,
+): Digest {
+	const buckets = { ...digest.buckets };
+	const list = [...digest.buckets[category]];
+	list.splice(index, 0, email);
+	buckets[category] = list;
+	return { ...digest, buckets, total: digest.total + 1 };
+}

@@ -4,8 +4,12 @@ import { useState, useEffect } from "react";
 import {
 	Digest,
 	DailyAnalytics,
+	EmailItem,
+	DigestBuckets,
 	findEmailById,
 	markEmailReadInDigest,
+	removeEmailFromDigest,
+	restoreEmailToDigest,
 } from "@/types";
 import Rail from "@/components/Rail";
 import EmailList from "@/components/EmailList";
@@ -15,6 +19,8 @@ import Header from "@/components/Header";
 import Charts from "@/components/Charts";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
+
+import { AnimatePresence, motion } from "motion/react";
 
 import { API_BASE } from "@/lib/config";
 
@@ -43,6 +49,13 @@ export default function Home() {
 	const [activeMode, setActiveMode] = useState<AppMode>("digest");
 	const [analytics, setAnalytics] = useState<DailyAnalytics[]>([]);
 
+	// Holds everything needed to put a deleted email back. Non-null = the
+	// undo toast is showing.
+	const [pendingUndo, setPendingUndo] = useState<{
+		email: EmailItem;
+		category: keyof DigestBuckets;
+		index: number;
+	} | null>(null);
 	const { user, loading: authLoading } = useAuth();
 	const router = useRouter();
 
@@ -190,6 +203,68 @@ export default function Home() {
 		});
 	}
 
+	function deleteEmail(gmailId: string) {
+		if (!digest) return;
+
+		const found = findEmailById(digest, gmailId);
+		if (!found) return;
+
+		const removed = removeEmailFromDigest(digest, gmailId);
+		if (!removed) return;
+
+		// Optimistic: the email disappears immediately. Trashing is reversible
+		// in Gmail for 30 days, so the cost of being wrong is low.
+		setDigest(removed.digest);
+		if (selectedEmailId === gmailId) setSelectedEmailId(null);
+		setPendingUndo({
+			email: found.email,
+			category: removed.category,
+			index: removed.index,
+		});
+
+		fetch(`${API_BASE}/emails/${encodeURIComponent(gmailId)}/trash`, {
+			method: "POST",
+			credentials: "include",
+		}).catch(() => {
+			// Roll back: put it where it was and drop the toast, so the UI never
+			// claims something was deleted when it wasn't.
+			setDigest((prev) =>
+				prev
+					? restoreEmailToDigest(
+							prev,
+							found.email,
+							removed.category,
+							removed.index,
+						)
+					: prev,
+			);
+			setPendingUndo(null);
+			setError("Couldn't delete that email");
+		});
+	}
+
+	function undoDelete() {
+		if (!pendingUndo || !digest) return;
+		const { email, category, index } = pendingUndo;
+
+		setDigest(restoreEmailToDigest(digest, email, category, index));
+		setPendingUndo(null);
+
+		fetch(`${API_BASE}/emails/${encodeURIComponent(email.gmail_id)}/untrash`, {
+			method: "POST",
+			credentials: "include",
+		}).catch(() => {
+			setError("Couldn't restore that email");
+		});
+	}
+
+	// Undo expires after 8 seconds.
+	useEffect(() => {
+		if (pendingUndo === null) return;
+		const timer = setTimeout(() => setPendingUndo(null), 8000);
+		return () => clearTimeout(timer);
+	}, [pendingUndo]);
+
 	function handleSelectEmail(gmailId: string) {
 		// Picking an email means the user is moving on — dismiss a generic error
 		// so column 3 can show the email. needsReauth stays sticky.
@@ -220,7 +295,26 @@ export default function Home() {
 	return (
 		<div className="flex h-screen flex-col overflow-hidden bg-canvas text-ink">
 			<Header />
-
+			{/* Undo toast — fixed so it floats above the columns */}
+			<AnimatePresence>
+				{pendingUndo && (
+					<motion.div
+						initial={{ opacity: 0, y: 20 }}
+						animate={{ opacity: 1, y: 0 }}
+						exit={{ opacity: 0, y: 20 }}
+						transition={{ duration: 0.2 }}
+						className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-4 rounded-xl border border-border bg-surface px-4 py-3 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.4)]"
+					>
+						<span className="text-sm text-ink">Moved to trash</span>
+						<button
+							onClick={undoDelete}
+							className="font-mono text-xs font-medium uppercase tracking-wider text-accent transition-colors hover:text-accent-hover"
+						>
+							Undo
+						</button>
+					</motion.div>
+				)}
+			</AnimatePresence>
 			{/* Body — rail + mode panels */}
 			<div className="relative flex-1 overflow-hidden md:flex md:flex-row">
 				{/* Column 1 — Rail */}
@@ -356,6 +450,7 @@ export default function Home() {
 										digest={digest}
 										selectedEmailId={selectedEmailId}
 										processing={processing}
+										onDelete={deleteEmail}
 									/>
 								) : (
 									<div className="flex h-full items-center justify-center">

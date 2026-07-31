@@ -25,6 +25,8 @@ from email_agent.gmail_client import (
     SCOPES as GMAIL_SCOPES,
     fetch_email_body,
     get_email_service,
+    trash_email,
+    untrash_email,
 )
 from email_agent import personas
 
@@ -167,6 +169,64 @@ def mark_email_read(gmail_id: str, user: dict = Depends(get_current_user)) -> di
     ok = db.mark_email_read(user["id"], gmail_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Email not found")
+    return {"ok": True}
+
+
+@app.post("/emails/{gmail_id}/trash")
+def trash_email_endpoint(gmail_id: str, user: dict = Depends(get_current_user)) -> dict:
+    """Move an email to Gmail's trash and hide it from the digest."""
+    try:
+        service = get_email_service(user["id"])
+        trash_email(service, gmail_id)
+    except GmailNotConnectedError:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "gmail_not_connected",
+                "message": "No Gmail account connected. Please connect your Gmail first.",
+            },
+        )
+    except GmailReauthError:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "gmail_reauth_required",
+                "message": "Your Gmail connection expired. Please reconnect to continue.",
+            },
+        )
+
+    # Gmail is the source of truth, so it goes first — if that call fails we
+    # never touch our own row, and the two stay consistent.
+    db.mark_email_trashed(user["id"], gmail_id)
+    return {"ok": True}
+
+
+@app.post("/emails/{gmail_id}/untrash")
+def untrash_email_endpoint(
+    gmail_id: str, user: dict = Depends(get_current_user)
+) -> dict:
+    """Restore an email from trash (undo)."""
+    try:
+        service = get_email_service(user["id"])
+        untrash_email(service, gmail_id)
+    except GmailNotConnectedError:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "gmail_not_connected",
+                "message": "No Gmail account connected. Please connect your Gmail first.",
+            },
+        )
+    except GmailReauthError:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "gmail_reauth_required",
+                "message": "Your Gmail connection expired. Please reconnect to continue.",
+            },
+        )
+
+    db.unmark_email_trashed(user["id"], gmail_id)
     return {"ok": True}
 
 

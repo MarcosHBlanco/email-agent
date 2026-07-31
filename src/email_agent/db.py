@@ -24,6 +24,7 @@ from zoneinfo import ZoneInfo
 
 import psycopg
 from psycopg import Connection
+from psycopg import cursor
 from psycopg.rows import dict_row, DictRow
 
 from email_agent import crypto
@@ -127,6 +128,7 @@ def init_db() -> None:
                 reason TEXT,
                 summary TEXT,
                 is_read BOOLEAN NOT NULL DEFAULT FALSE,
+                is_trashed BOOLEAN NOT NULL DEFAULT FALSE,
                 categorized_at TEXT NOT NULL,
                 UNIQUE (user_id, gmail_id),
                 FOREIGN KEY (user_id) REFERENCES users (id),
@@ -173,6 +175,16 @@ def init_db() -> None:
                 created_at TEXT NOT NULL,
                 FOREIGN KEY (user_id) REFERENCES users (id)
             )
+            """)
+
+        # --- Migrations: changes to tables that may already exist ---
+        # CREATE TABLE IF NOT EXISTS is a no-op on an existing table, so new
+        # columns must be added explicitly here. ADD COLUMN IF NOT EXISTS is
+        # idempotent (a NOTICE, not an error, on repeat runs), which matters
+        # because init_db() runs on every server start.
+        conn.execute("""
+            ALTER TABLE email_categorizations
+            ADD COLUMN IF NOT EXISTS is_trashed BOOLEAN NOT NULL DEFAULT FALSE
             """)
 
 
@@ -297,6 +309,7 @@ def get_todays_digest(user_id: int) -> dict | None:
             SELECT gmail_id, sender, subject, category, reason, summary, is_read
             FROM email_categorizations
             WHERE user_id = %s
+              AND is_trashed = FALSE
               AND categorized_at >= %s
               AND categorized_at <  %s
             ORDER BY categorized_at DESC, id DESC
@@ -338,6 +351,38 @@ def mark_email_read(user_id: int, gmail_id: str) -> bool:
             """
             UPDATE email_categorizations
             SET is_read = TRUE
+            WHERE user_id = %s AND gmail_id = %s
+            """,
+            (user_id, gmail_id),
+        )
+        return cursor.rowcount > 0
+
+
+def mark_email_trashed(user_id: int, gmail_id: str) -> bool:
+    """Mark one email as trashed. Returns False if the user doesn't own it.
+
+    Scoped by user_id so a user can never touch another user's row by
+    guessing an id — same guard as mark_email_read.
+    """
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """
+            UPDATE email_categorizations
+            SET is_trashed = TRUE
+            WHERE user_id = %s AND gmail_id = %s
+            """,
+            (user_id, gmail_id),
+        )
+        return cursor.rowcount > 0
+
+
+def unmark_email_trashed(user_id: int, gmail_id: str) -> bool:
+    """Restore a trashed email so it reappears in the digest."""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """
+            UPDATE email_categorizations
+            SET is_trashed = FALSE
             WHERE user_id = %s AND gmail_id = %s
             """,
             (user_id, gmail_id),

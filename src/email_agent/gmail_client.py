@@ -208,3 +208,18 @@ def fetch_email_body(service: Any, gmail_id: str) -> dict:
         "sender": headers.get("from", "(unknown sender)"),
         "date": headers.get("date", ""),
     }
+
+
+def trash_email(service: Any, gmail_id: str) -> None:
+    """Move one email to Gmail's trash.
+
+    Deliberately trash, not delete: trashed mail sits recoverable in Gmail for
+    30 days. Permanent deletion would need the far broader mail.google.com
+    scope, which we neither hold nor want.
+    """
+    service.users().messages().trash(userId="me", id=gmail_id).execute()
+
+
+def untrash_email(service: Any, gmail_id: str) -> None:
+    """Restore an email from Gmail's trash back to the inbox."""
+    service.users().messages().untrash(userId="me", id=gmail_id).execute()
