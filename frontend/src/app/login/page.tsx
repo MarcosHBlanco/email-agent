@@ -35,7 +35,7 @@ export default function LoginPage() {
 		<div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-canvas px-4">
 			{/* Soft accent glow behind the card — echoes the landing page's hero */}
 			<div
-				className="pointer-events-none absolute left-1/2 top-1/3 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-40 blur-[120px]"
+				className="pointer-events-none absolute left-1/2 top-1/3 h-125 w-125 -translate-x-1/2 -translate-y-1/2 rounded-full opacity-40 blur-[120px]"
 				style={{
 					background:
 						"radial-gradient(circle, var(--color-accent) 0%, transparent 65%)",
