@@ -2,7 +2,6 @@
 	position: relative;
 	min-height: 100vh;
 	isolation: isolate;
-	scroll-behavior: smooth;
 }
 .sift-landing {
 	--bg: #0a0f1e;
@@ -13,7 +12,7 @@
 
 	--ink: #eef2fb;
 	--ink-soft: #a7b2ce;
-	--ink-faint: #6d7799;
+	--ink-faint: #7d87a8;
 
 	--accent: #5b7cfa;
 	--accent-bright: #85a0ff;
@@ -35,7 +34,7 @@
 	padding: 0;
 	box-sizing: border-box;
 }
-.sift-landing {
+html:has(.sift-landing) {
 	scroll-behavior: smooth;
 }
 .sift-landing {
@@ -44,7 +43,7 @@
 	font-family: var(--font-body);
 	line-height: 1.6;
 	-webkit-font-smoothing: antialiased;
-	overflow-x: hidden;
+	overflow-x: clip;
 }
 .sift-landing::after {
 	content: "";
@@ -67,6 +66,14 @@
 .sift-landing ::selection {
 	background: var(--accent);
 	color: #fff;
+}
+/* Keyboard focus ring. :focus-visible (not :focus) shows this only for
+   keyboard navigation, not mouse clicks. */
+.sift-landing a:focus-visible,
+.sift-landing button:focus-visible {
+	outline: 2px solid var(--accent-bright);
+	outline-offset: 3px;
+	border-radius: 6px;
 }
 .sift-landing::before {
 	content: "";
@@ -93,7 +100,7 @@
 	top: 0;
 	z-index: 50;
 	backdrop-filter: blur(12px);
-	background: rgba(13, 11, 24, 0.7);
+	background: color-mix(in srgb, var(--bg) 85%, transparent);
 	border-bottom: 1px solid var(--border-soft);
 }
 .sift-landing .nav-inner {
@@ -187,7 +194,7 @@
 	font-family: var(--font-mono);
 	font-size: 13px;
 	color: var(--accent-bright);
-	background: rgba(124, 120, 255, 0.1);
+	background: color-mix(in srgb, var(--bg) 12%, transparent);
 	border: 1px solid var(--border);
 	padding: 6px 14px;
 	border-radius: 100px;
@@ -265,7 +272,7 @@
 .sift-landing .demo-stage {
 	display: grid;
 	grid-template-columns: 1fr 1.4fr;
-	height: 468px;
+	height: 650px;
 }
 .sift-landing .stream-in {
 	border-right: 1px solid var(--border-soft);
@@ -353,18 +360,18 @@
 }
 .sift-landing .badge-important {
 	color: var(--important);
-	background: rgba(244, 112, 165, 0.12);
-	border: 1px solid rgba(244, 112, 165, 0.3);
+	background: color-mix(in srgb, var(--important) 12%, transparent);
+	border: 1px solid color-mix(in srgb, var(--important) 30%, transparent);
 }
 .sift-landing .badge-routine {
 	color: var(--routine);
-	background: rgba(91, 141, 239, 0.12);
-	border: 1px solid rgba(91, 141, 239, 0.3);
+	background: color-mix(in srgb, var(--routine) 12%, transparent);
+	border: 1px solid color-mix(in srgb, var(--routine) 30%, transparent);
 }
 .sift-landing .badge-junk {
 	color: var(--ink-faint);
-	background: rgba(107, 100, 133, 0.12);
-	border: 1px solid rgba(107, 100, 133, 0.3);
+	background: color-mix(in srgb, var(--ink-faint) 12%, transparent);
+	border: 1px solid color-mix(in srgb, var(--ink-faint) 30%, transparent);
 }
 .sift-landing .bucket-count {
 	margin-left: auto;
@@ -401,7 +408,6 @@
 	}
 }
 .sift-landing .strip {
-	padding: 48px 0 20px;
 	text-align: center;
 }
 .sift-landing .strip p {
@@ -414,17 +420,23 @@
 	padding: 100px 0;
 	position: relative;
 }
+/* Sticky nav overlaps anchor targets without this. */
+.sift-landing #how,
+.sift-landing #features,
+.sift-landing #privacy {
+	scroll-margin-top: 80px;
+}
 .sift-landing #how {
-	padding: 100px 0;
+	padding-block: 100px;
 }
 .sift-landing #features {
-	padding: 110px 0;
+	padding-block: 110px;
 }
 .sift-landing #privacy {
-	padding: 130px 0;
+	padding-block: 130px;
 }
 .sift-landing .final {
-	padding: 130px 0 40px;
+	padding: 130px 40px;
 }
 .sift-landing .strip {
 	padding: 56px 0 20px;
@@ -929,13 +941,17 @@
 		opacity: 1;
 		transform: none;
 	}
-	.sift-landing {
+	html:has(.sift-landing) {
 		scroll-behavior: auto;
 	}
 }
 @media (max-width: 860px) {
 	.sift-landing .demo-stage {
 		grid-template-columns: 1fr;
+		height: 640px;
+	}
+	.sift-landing #rawList {
+		height: 200px; /* the stream gets less; buckets get the rest */
 	}
 	.sift-landing .stream-in {
 		border-right: none;

@@ -23,8 +23,24 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-	title: "Sift",
-	description: "See what matters. Sift the rest.",
+	metadataBase: new URL("https://siftmail.vercel.app"),
+	title: "Sift — See what matters. Sift the rest.",
+	description:
+		"Sift reads every email, sorts the signal from the clutter, and hands you a calm daily digest of what actually needs you.",
+	openGraph: {
+		title: "Sift — See what matters. Sift the rest.",
+		description: "AI-powered inbox triage. Your email content is never stored.",
+		url: "https://siftmail.vercel.app",
+		siteName: "Sift",
+		type: "website",
+		images: [{ url: "/og.png", width: 1200, height: 630, alt: "Sift" }],
+	},
+	twitter: {
+		card: "summary_large_image",
+		title: "Sift — See what matters. Sift the rest.",
+		description: "AI-powered inbox triage. Your email content is never stored.",
+		images: ["/og.png"],
+	},
 };
 
 export default function RootLayout({
