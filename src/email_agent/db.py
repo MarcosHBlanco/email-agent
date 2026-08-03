@@ -608,3 +608,34 @@ def delete_oauth_state(state: str) -> None:
     """Delete a used OAuth state (one-time use)."""
     with get_connection() as conn:
         conn.execute("DELETE FROM oauth_states WHERE state = %s", (state,))
+
+
+def get_users_with_gmail() -> list[dict]:
+    """Users who have connected Gmail, with their timezone.
+
+    The JOIN filters out anyone without a Gmail connection — a scheduled run
+    would just fail for them.
+    """
+
+    with get_connection() as conn:
+        rows = conn.execute("""
+            SELECT u.id, u.timezone
+            FROM users u
+            JOIN gmail_connections g ON g.user_id = u.id
+            """).fetchall()
+    return [dict(row) for row in rows]
+
+
+def has_run_since(user_id: int, since_iso: str) -> bool:
+    """Whether this user has had any digest run at or after the given time.
+
+    Guards against double-processing: if the hourly cron fires twice (retry,
+    overlapping execution), or the user manually ran a digest minutes ago,
+    we skip rather than paying Claude for the same window again.
+    """
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM runs WHERE user_id = %s AND run_at >= %s LIMIT 1",
+            (user_id, since_iso),
+        ).fetchone()
+    return row is not None

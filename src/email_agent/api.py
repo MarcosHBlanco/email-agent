@@ -41,6 +41,13 @@ REDIRECT_URI = f"{BACKEND_URL}/auth/gmail/callback"
 
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
 
+# Shared secret for the scheduled-runs endpoint. Without it that endpoint
+# would be an open trigger for Claude API calls on our bill.
+CRON_SECRET = os.environ.get("CRON_SECRET", "")
+
+# Local hours (in each user's own timezone) when a digest should run.
+SCHEDULED_HOURS = {9, 13, 17}
+
 # Cookie policy depends on whether the frontend and backend are same-site.
 # Locally both are localhost -> same-site, so Lax works and Secure would
 # break (localhost is http). In production they're on different domains
@@ -62,7 +69,8 @@ GOOGLE_CLIENT_CONFIG = {
     }
 }
 
-from fastapi import FastAPI, Response, Cookie, HTTPException, Depends
+from fastapi import FastAPI, Response, Cookie, HTTPException, Depends, Header
+from datetime import datetime, timezone
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -82,6 +90,53 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Email Agent", lifespan=lifespan)
+
+
+# Endpoint for scheduled runs ran by an external scheduler
+@app.post("/cron/run-digests")
+def cron_run_digests(x_cron_secret: str = Header(default="")) -> dict:
+    """Run digests for every user whose local time is a scheduled hour.
+
+    Called hourly by an external scheduler. Hourly rather than three times a
+    day because a cron schedule is a fixed UTC time and can't know each
+    user's timezone — so we fire every hour and let this endpoint decide who
+    is due. One schedule serves every timezone.
+    """
+    if not CRON_SECRET or not secrets.compare_digest(x_cron_secret, CRON_SECRET):
+        raise HTTPException(status_code=401, detail="Not authorized")
+
+    now_utc = datetime.now(timezone.utc)
+    # Start of the current UTC hour — the window we check for existing runs.
+    hour_start = now_utc.replace(minute=0, second=0, microsecond=0).isoformat()
+
+    results = {"ran": [], "skipped": [], "failed": []}
+
+    for user in db.get_users_with_gmail():
+        user_id = user["id"]
+        try:
+            tz = ZoneInfo(user["timezone"] or "UTC")
+        except Exception:
+            tz = ZoneInfo("UTC")
+
+        local_hour = now_utc.astimezone(tz).hour
+        if local_hour not in SCHEDULED_HOURS:
+            results["skipped"].append(user_id)
+            continue
+
+        # Already ran this hour — a manual run, or a duplicate cron fire.
+        # Skip rather than pay Claude for the same window twice.
+        if db.has_run_since(user_id, hour_start):
+            results["skipped"].append(user_id)
+            continue
+
+        try:
+            run_digest(user_id)
+            results["ran"].append(user_id)
+        except Exception as e:
+            # One user's dead Gmail token must not stop everyone else's run.
+            results["failed"].append({"user_id": user_id, "error": str(e)})
+
+    return results
 
 
 def get_current_user(session: str | None = Cookie(default=None)) -> dict:
