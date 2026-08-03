@@ -27,6 +27,8 @@ from email_agent.gmail_client import (
     get_email_service,
     trash_email,
     untrash_email,
+    build_reply_message,
+    send_reply,
 )
 from email_agent import personas
 
@@ -484,3 +486,53 @@ def gmail_status(user: dict = Depends(get_current_user)) -> dict:
     if connection is None:
         return {"connected": False, "email": None}
     return {"connected": True, "email": connection["google_email"]}
+
+
+class ReplyRequest(BaseModel):
+    body_html: str
+    body_plain: str
+    reply_all: bool = False
+
+
+@app.post("/emails/{gmail_id}/reply")
+def reply_to_email(
+    gmail_id: str,
+    body: ReplyRequest,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Send a threaded reply to an email."""
+    connection = db.get_gmail_connection(user["id"])
+    if connection is None:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "gmail_not_connected",
+                "message": "No Gmail account connected. Please connect your Gmail first.",
+            },
+        )
+
+    try:
+        service = get_email_service(user["id"])
+        # Re-fetch the original: we need its Message-ID, References, and
+        # recipient headers to thread the reply correctly. Not stored, so we
+        # ask Gmail each time — same on-demand principle as reading a body.
+        original = fetch_email_body(service, gmail_id)
+
+        raw = build_reply_message(
+            original=original,
+            my_email=connection["google_email"],
+            body_plain=body.body_plain,
+            body_html=body.body_html,
+            reply_all=body.reply_all,
+        )
+        send_reply(service, raw, original.get("thread_id", ""))
+    except GmailReauthError:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "gmail_reauth_required",
+                "message": "Your Gmail connection expired. Please reconnect to continue.",
+            },
+        )
+
+    return {"ok": True}

@@ -3,6 +3,9 @@
 import os
 import base64
 
+from email.message import EmailMessage
+from email.utils import getaddresses, formataddr
+
 from datetime import datetime, timedelta, timezone
 from os import access
 from sqlite3 import connect
@@ -207,6 +210,13 @@ def fetch_email_body(service: Any, gmail_id: str) -> dict:
         "subject": headers.get("subject", "(no subject)"),
         "sender": headers.get("from", "(unknown sender)"),
         "date": headers.get("date", ""),
+        # Threading + recipient headers, needed to build a proper reply.
+        "message_id": headers.get("message-id", ""),
+        "references": headers.get("references", ""),
+        "reply_to": headers.get("reply-to", ""),
+        "to": headers.get("to", ""),
+        "cc": headers.get("cc", ""),
+        "thread_id": message.get("threadId", ""),
     }
 
 
@@ -223,3 +233,75 @@ def trash_email(service: Any, gmail_id: str) -> None:
 def untrash_email(service: Any, gmail_id: str) -> None:
     """Restore an email from Gmail's trash back to the inbox."""
     service.users().messages().untrash(userId="me", id=gmail_id).execute()
+
+
+def build_reply_message(
+    original: dict,
+    my_email: str,
+    body_plain: str,
+    body_html: str,
+    reply_all: bool = False,
+) -> str:
+    """Build a threaded reply and return it base64url-encoded for Gmail's API.
+
+    Threading works through two independent mechanisms:
+      - In-Reply-To / References headers, which every mail client uses to
+        rebuild a conversation. References carries the full ancestry, so we
+        append the original's Message-ID to whatever chain it already had.
+      - Gmail's own threadId, passed separately at send time.
+    Both are needed: the headers thread it for the recipient, threadId keeps
+    it in the right conversation inside Gmail's UI.
+
+    Sends multipart/alternative (plain + HTML), the same structure Gmail
+    sends, so clients that don't render HTML still show something readable.
+    """
+    msg = EmailMessage()
+
+    # Reply-To wins over From when present — mailing lists rely on this.
+    reply_target = original.get("reply_to") or original.get("sender", "")
+    msg["To"] = reply_target
+
+    if reply_all:
+        # Everyone else on To/Cc, minus ourselves and minus whoever is already
+        # the primary recipient (no duplicates, and never Cc yourself).
+        primary = {addr.lower() for _, addr in getaddresses([reply_target])}
+        cc: list[str] = []
+        seen: set[str] = set()
+        for header in ("to", "cc"):
+            for name, addr in getaddresses([original.get(header, "")]):
+                if not addr:
+                    continue
+                low = addr.lower()
+                if low == my_email.lower() or low in primary or low in seen:
+                    continue
+                seen.add(low)
+                cc.append(formataddr((name, addr)))
+        if cc:
+            msg["Cc"] = ", ".join(cc)
+
+    subject = original.get("subject", "")
+    msg["Subject"] = subject if subject.lower().startswith("re:") else f"Re: {subject}"
+
+    message_id = original.get("message_id", "")
+    if message_id:
+        msg["In-Reply-To"] = message_id
+        references = original.get("references", "").split()
+        references.append(message_id)
+        msg["References"] = " ".join(references)
+
+    msg.set_content(body_plain)
+    msg.add_alternative(body_html, subtype="html")
+
+    return base64.urlsafe_b64encode(msg.as_bytes()).decode()
+
+
+def send_reply(
+    service: Any,
+    raw_message: str,
+    thread_id: str = "",
+) -> dict:
+    """Send a prepared reply. threadId keeps it in the same Gmail conversation."""
+    payload: dict = {"raw": raw_message}
+    if thread_id:
+        payload["threadId"] = thread_id
+    return service.users().messages().send(userId="me", body=payload).execute()

@@ -1,10 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import DOMPurify from "dompurify";
 import { Digest, EmailItem, findEmailById } from "@/types";
 import { fadeInUp, transition } from "@/lib/motion";
 import { API_BASE } from "@/lib/config";
-import { useAuth } from "./AuthProvider";
 
 interface EmailDetailProps {
 	digest: Digest;
@@ -161,10 +160,13 @@ function EmailContent({
 	onDelete: (gmailId: string) => void;
 }) {
 	const style = CATEGORY_STYLE[category];
-	const { gmail } = useAuth();
-	// Use the connected account so the link opens the right mailbox. Falls back
-	// to "0" (first signed-in Google account) only if status hasn't loaded yet.
-	const gmailAccount = gmail?.email ?? "0";
+	const [replyMode, setReplyMode] = useState<"reply" | "reply-all" | null>(
+		null,
+	);
+	// const { gmail } = useAuth();
+	// // Use the connected account so the link opens the right mailbox. Falls back
+	// // to "0" (first signed-in Google account) only if status hasn't loaded yet.
+	// const gmailAccount = gmail?.email ?? "0";
 	return (
 		<div className="flex h-full flex-col">
 			<div className="border-b border-border px-6 py-4">
@@ -202,36 +204,46 @@ function EmailContent({
 				</section>
 			</div>
 
-			<div className="border-t border-border px-6 py-3">
-				<div className="flex gap-2">
-					<button
-						disabled
-						className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-faint cursor-not-allowed"
-					>
-						Reply
-					</button>
-					<button
-						onClick={() => onDelete(email.gmail_id)}
-						className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-soft transition-colors hover:border-important hover:text-important"
-					>
-						Trash
-					</button>
-					{/* u/0 = first signed-in Google account. Gmail has no URL form
-									    that both targets a specific account AND deep-links a message:
-									    u/{email} 404s, and ?authuser= opens the mailbox but drops the
-									    #all/{id} fragment. So multi-account users may land on the
-									    wrong mailbox. Verified empirically. */}
-					<a
-						href={`https://mail.google.com/mail/u/0/#all/${email.gmail_id}`}
-						target="_blank"
-						rel="noopener noreferrer"
-						className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-soft transition-colors hover:border-accent hover:text-ink"
-					>
-						Open in Gmail
-					</a>
+			{replyMode !== null ? (
+				<ReplyComposer
+					key={`${email.gmail_id}-${replyMode}`}
+					email={email}
+					replyAll={replyMode === "reply-all"}
+					onClose={() => setReplyMode(null)}
+				/>
+			) : (
+				<div className="border-t border-border px-6 py-3">
+					<div className="flex flex-wrap gap-2">
+						<button
+							onClick={() => setReplyMode("reply")}
+							className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-soft transition-colors hover:border-accent hover:text-ink"
+						>
+							Reply
+						</button>
+						<button
+							onClick={() => setReplyMode("reply-all")}
+							className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-soft transition-colors hover:border-accent hover:text-ink"
+						>
+							Reply all
+						</button>
+						<button
+							onClick={() => onDelete(email.gmail_id)}
+							className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-soft transition-colors hover:border-important hover:text-important"
+						>
+							Trash
+						</button>
+
+						<a
+							href={`https://mail.google.com/mail/u/0/#all/${email.gmail_id}`}
+							target="_blank"
+							rel="noopener noreferrer"
+							className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-soft transition-colors hover:border-accent hover:text-ink"
+						>
+							Open in Gmail
+						</a>
+					</div>
 				</div>
-				<p className="mt-2 text-xs text-ink-faint">Reply coming soon</p>
-			</div>
+			)}
 		</div>
 	);
 }
@@ -337,4 +349,159 @@ function EmailBody({ gmailId }: { gmailId: string }) {
 	}
 
 	return <p className="text-sm text-ink-faint">No readable content.</p>;
+}
+
+/* ---- Reply composer ---- */
+
+function ReplyComposer({
+	email,
+	replyAll,
+	onClose,
+}: {
+	email: EmailItem;
+	replyAll: boolean;
+	onClose: () => void;
+}) {
+	const editorRef = useRef<HTMLDivElement>(null);
+	const [sending, setSending] = useState(false);
+	const [sent, setSent] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	function format(command: string, value?: string) {
+		document.execCommand(command, false, value);
+		editorRef.current?.focus();
+	}
+
+	function addLink() {
+		const url = window.prompt("Link URL:");
+		if (url) format("createLink", url);
+	}
+
+	async function send() {
+		const editor = editorRef.current;
+		if (!editor) return;
+
+		const bodyHtml = editor.innerHTML.trim();
+		const bodyPlain = editor.innerText.trim();
+		if (!bodyPlain) {
+			setError("Write something first");
+			return;
+		}
+
+		setSending(true);
+		setError(null);
+		try {
+			const res = await fetch(
+				`${API_BASE}/emails/${encodeURIComponent(email.gmail_id)}/reply`,
+				{
+					method: "POST",
+					credentials: "include",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						body_html: bodyHtml,
+						body_plain: bodyPlain,
+						reply_all: replyAll,
+					}),
+				},
+			);
+			if (!res.ok) {
+				const data = await res.json().catch(() => ({}));
+				const detail = data.detail;
+				throw new Error(
+					detail?.message ??
+						(typeof detail === "string" ? detail : null) ??
+						"Couldn't send your reply",
+				);
+			}
+			setSent(true);
+			setTimeout(onClose, 1200);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Couldn't send your reply");
+		} finally {
+			setSending(false);
+		}
+	}
+
+	if (sent) {
+		return (
+			<div className="border-t border-border px-6 py-4">
+				<p className="text-sm text-routine">Reply sent ✓</p>
+			</div>
+		);
+	}
+
+	return (
+		<div className="border-t border-border px-6 py-4">
+			<div className="mb-2">
+				<span className="font-mono text-xs uppercase tracking-wider text-ink-faint">
+					{replyAll ? "Reply all to" : "Replying to"} {email.sender}
+				</span>
+			</div>
+
+			{/* Formatting toolbar */}
+			<div className="flex gap-1 rounded-t-lg border border-b-0 border-border bg-surface-hover px-2 py-1.5">
+				<ToolbarButton onClick={() => format("bold")} label="Bold">
+					<strong>B</strong>
+				</ToolbarButton>
+				<ToolbarButton onClick={() => format("italic")} label="Italic">
+					<em>I</em>
+				</ToolbarButton>
+				<ToolbarButton onClick={() => format("underline")} label="Underline">
+					<u>U</u>
+				</ToolbarButton>
+				<ToolbarButton onClick={addLink} label="Insert link">
+					🔗
+				</ToolbarButton>
+			</div>
+
+			<div
+				ref={editorRef}
+				contentEditable
+				suppressContentEditableWarning
+				className="min-h-24 max-h-64 overflow-y-auto rounded-b-lg border border-border bg-canvas px-3 py-2 text-sm leading-relaxed text-ink outline-none focus:border-accent"
+			/>
+
+			{error && <p className="mt-2 text-sm text-important">{error}</p>}
+
+			<div className="mt-3 flex gap-2">
+				<button
+					onClick={send}
+					disabled={sending}
+					className="rounded-lg bg-accent px-4 py-1.5 text-sm font-semibold text-white shadow-[0_4px_20px_-2px_var(--color-accent)] transition-all hover:-translate-y-0.5 hover:bg-accent-hover disabled:opacity-60 disabled:hover:translate-y-0"
+				>
+					{sending ? "Sending…" : "Send"}
+				</button>
+				<button
+					onClick={onClose}
+					disabled={sending}
+					className="rounded-lg border border-border px-4 py-1.5 text-sm text-ink-soft transition-colors hover:text-ink disabled:opacity-60"
+				>
+					Cancel
+				</button>
+			</div>
+		</div>
+	);
+}
+
+function ToolbarButton({
+	onClick,
+	label,
+	children,
+}: {
+	onClick: () => void;
+	label: string;
+	children: React.ReactNode;
+}) {
+	return (
+		<button
+			type="button"
+			onMouseDown={(e) => e.preventDefault()}
+			onClick={onClick}
+			title={label}
+			aria-label={label}
+			className="h-7 w-7 rounded text-sm text-ink-soft transition-colors hover:bg-surface hover:text-ink"
+		>
+			{children}
+		</button>
+	);
 }
