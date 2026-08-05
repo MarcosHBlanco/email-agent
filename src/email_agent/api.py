@@ -92,6 +92,17 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Email Agent", lifespan=lifespan)
 
 
+def _most_recent_slot(now_local: datetime) -> datetime | None:
+    """The latest scheduled slot that has already passed today, in local time.
+
+    Returns None before the day's first slot — we don't want a 3am digest.
+    """
+    passed = [h for h in sorted(SCHEDULED_HOURS) if now_local.hour >= h]
+    if not passed:
+        return None
+    return now_local.replace(hour=passed[-1], minute=0, second=0, microsecond=0)
+
+
 # Endpoint for scheduled runs ran by an external scheduler
 @app.post("/cron/run-digests")
 def cron_run_digests(x_cron_secret: str = Header(default="")) -> dict:
@@ -106,9 +117,6 @@ def cron_run_digests(x_cron_secret: str = Header(default="")) -> dict:
         raise HTTPException(status_code=401, detail="Not authorized")
 
     now_utc = datetime.now(timezone.utc)
-    # Start of the current UTC hour — the window we check for existing runs.
-    hour_start = now_utc.replace(minute=0, second=0, microsecond=0).isoformat()
-
     results = {"ran": [], "skipped": [], "failed": []}
 
     for user in db.get_users_with_gmail():
@@ -118,14 +126,18 @@ def cron_run_digests(x_cron_secret: str = Header(default="")) -> dict:
         except Exception:
             tz = ZoneInfo("UTC")
 
-        local_hour = now_utc.astimezone(tz).hour
-        if local_hour not in SCHEDULED_HOURS:
+        # Which scheduled slot has most recently passed for this user?
+        # We ask "is this user overdue" rather than "is it exactly 9/13/17",
+        # because GitHub Actions drops and delays scheduled fires — often by
+        # hours. An exact-hour check silently loses the whole window; this
+        # catches up on the next fire instead.
+        slot = _most_recent_slot(now_utc.astimezone(tz))
+        if slot is None:
             results["skipped"].append(user_id)
             continue
 
-        # Already ran this hour — a manual run, or a duplicate cron fire.
-        # Skip rather than pay Claude for the same window twice.
-        if db.has_run_since(user_id, hour_start):
+        slot_utc = slot.astimezone(timezone.utc).isoformat()
+        if db.has_run_since(user_id, slot_utc):
             results["skipped"].append(user_id)
             continue
 
@@ -133,7 +145,6 @@ def cron_run_digests(x_cron_secret: str = Header(default="")) -> dict:
             run_digest(user_id)
             results["ran"].append(user_id)
         except Exception as e:
-            # One user's dead Gmail token must not stop everyone else's run.
             results["failed"].append({"user_id": user_id, "error": str(e)})
 
     return results
