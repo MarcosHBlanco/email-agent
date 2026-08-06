@@ -344,7 +344,8 @@ export default function LandingPage() {
 				</h1>
 				<p className="hero-sub">
 					Your inbox is noise. Sift reads every email, sorts the signal from the
-					clutter, and hands you a calm daily digest of what actually needs you.
+					clutter, and hands you a calm digest of what actually needs you —
+					ready to read and reply to, three times a day.
 				</p>
 				<div className="hero-cta">
 					<a
@@ -443,8 +444,8 @@ export default function LandingPage() {
 					<div className="sec-eyebrow">How it works</div>
 					<h2>Three steps to a quieter inbox.</h2>
 					<p className="sec-lead">
-						No new app to live in. No rules to configure. Sift works in the
-						background and hands you the result.
+						No rules to configure, nothing to check. Sift runs three times a day
+						on its own — your digest is ready before you think to look.
 					</p>
 				</div>
 				<div className="steps">
@@ -467,10 +468,11 @@ export default function LandingPage() {
 					</div>
 					<div className="step reveal">
 						<span className="step-num">03</span>
-						<h3>Get your digest</h3>
+						<h3>Read it. Answer it. Done.</h3>
 						<p>
-							Open Sift to a clean summary of what mattered — not another inbox
-							to clear. See patterns over time in your dashboard.
+							Open Sift to what actually mattered — then read the full email,
+							reply, or bin it without leaving. The five that need you get
+							handled in the time it took to scroll past them.
 						</p>
 					</div>
 				</div>
