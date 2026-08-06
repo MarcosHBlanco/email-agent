@@ -119,6 +119,7 @@ html:has(.sift-landing) {
 	font-weight: 600;
 	font-size: 22px;
 	letter-spacing: -0.02em;
+	margin-right: 20px;
 }
 .sift-landing .logo-mark {
 	width: 28px;
@@ -982,5 +983,9 @@ html:has(.sift-landing) {
 	}
 	.sift-landing .nav-links .link {
 		display: none;
+	}
+	.sift-landing .nav-inner {
+		display: flex;
+		justify-content: space-between;
 	}
 }
