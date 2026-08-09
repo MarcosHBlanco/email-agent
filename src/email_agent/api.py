@@ -32,6 +32,19 @@ from email_agent.gmail_client import (
 )
 from email_agent import personas
 
+import sentry_sdk
+
+SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
+if SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        environment=os.environ.get("SENTRY_ENV", "production"),
+        # No traces_sample_rate — error tracking only, not performance
+        # monitoring, which would sample every request and burn the quota.
+        # No send_default_pii — our requests carry session cookies and the
+        # cron secret header; we don't want those in error reports.
+    )
+
 load_dotenv()  # load .env before anything reads env vars
 
 GOOGLE_CLIENT_ID = os.environ["GOOGLE_CLIENT_ID"]
@@ -142,9 +155,20 @@ def cron_run_digests(x_cron_secret: str = Header(default="")) -> dict:
             continue
 
         try:
+            raise RuntimeError(
+                "Sentry test — scheduled digest failure path"
+            )  # TEMP: remove after verifying
             run_digest(user_id)
             results["ran"].append(user_id)
         except Exception as e:
+            # Handled here (we continue to the next user), so Sentry's
+            # automatic capture never sees it — the request still returns 200.
+            # Report explicitly, or a scheduled-run failure (e.g. Gmail token
+            # expiry) vanishes into the response with no alert.
+            sentry_sdk.capture_exception(
+                e,
+                tags={"phase": "scheduled_digest", "user_id": user_id},
+            )
             results["failed"].append({"user_id": user_id, "error": str(e)})
 
     return results
