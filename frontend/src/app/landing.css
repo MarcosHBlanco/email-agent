@@ -745,6 +745,41 @@ html:has(.sift-landing) {
 .sift-landing .mk-trend.draw circle.pt {
 	animation: fadeArea 0.4s ease 1.5s forwards;
 }
+
+.sift-landing .mk-actions {
+	width: 100%;
+	max-width: 360px;
+	margin: 0 auto;
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+.sift-landing .mk-actions-body {
+	font-size: 13px;
+	color: var(--ink-soft);
+	line-height: 1.5;
+	margin-top: 10px;
+}
+.sift-landing .mk-action-bar {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+.sift-landing .mk-action-btn {
+	font-family: var(--font-mono);
+	font-size: 11px;
+	padding: 7px 12px;
+	border-radius: 8px;
+	border: 1px solid var(--border);
+	color: var(--ink-soft);
+	background: var(--bg-card);
+}
+.sift-landing .mk-action-primary {
+	color: #fff;
+	background: var(--accent);
+	border-color: var(--accent);
+	box-shadow: 0 4px 16px var(--glow-accent);
+}
 .sift-landing .steps {
 	display: grid;
 	grid-template-columns: repeat(3, 1fr);

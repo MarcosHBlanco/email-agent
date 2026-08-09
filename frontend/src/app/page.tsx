@@ -582,6 +582,37 @@ export default function LandingPage() {
 						</div>
 					</div>
 				</div>
+				{/* Feature row 4: actions */}
+				<div className="feature-row flip reveal">
+					<div className="feature-copy">
+						<div className="feature-tag">04 — The actions</div>
+						<h3>Handle it without leaving</h3>
+						<p>
+							Reading a digest is only half the job. Open any email in full,
+							reply or reply-all, or bin it — right from Sift. The handful that
+							need you get answered in the time it used to take just to find
+							them.
+						</p>
+					</div>
+					<div className="feature-visual">
+						<div className="mk-actions">
+							<div className="mk-email">
+								<div className="mk-from">Sarah Chen · Product</div>
+								<div className="mk-sub">Re: Q3 launch timeline</div>
+								<div className="mk-actions-body">
+									Confirming we&apos;re still on for the 15th — can you review
+									the deck before then?
+								</div>
+							</div>
+							<div className="mk-action-bar">
+								<span className="mk-action-btn mk-action-primary">Reply</span>
+								<span className="mk-action-btn">Reply all</span>
+								<span className="mk-action-btn">Delete</span>
+								<span className="mk-action-btn">Open in Gmail</span>
+							</div>
+						</div>
+					</div>
+				</div>
 
 				{/* Two clean supporting cards (security + multi-user) */}
 				<div
