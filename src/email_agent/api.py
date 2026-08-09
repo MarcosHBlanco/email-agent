@@ -59,7 +59,7 @@ FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
 CRON_SECRET = os.environ.get("CRON_SECRET", "")
 
 # Local hours (in each user's own timezone) when a digest should run.
-SCHEDULED_HOURS = {9, 13, 15, 17}
+SCHEDULED_HOURS = {9, 13, 17}
 
 # Cookie policy depends on whether the frontend and backend are same-site.
 # Locally both are localhost -> same-site, so Lax works and Secure would
@@ -152,7 +152,7 @@ def cron_run_digests(x_cron_secret: str = Header(default="")) -> dict:
         slot_utc = slot.astimezone(timezone.utc).isoformat()
         if db.has_run_since(user_id, slot_utc):
             results["skipped"].append(user_id)
-            # continue
+            continue
 
         try:
             raise RuntimeError(
