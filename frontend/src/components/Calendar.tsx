@@ -54,10 +54,10 @@ export default function Calendar({ analytics, year, month }: CalendarProps) {
 		<div className="mx-auto w-full max-w-5xl p-4 md:p-6">
 			{/* Header + legend */}
 			<div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-				<h2 className="text-lg font-semibold text-ink">
+				<h2 className="font-serif text-xl font-semibold tracking-tight text-ink">
 					{MONTH_NAMES[month]} {year}
 				</h2>
-				<div className="flex items-center gap-3 text-xs text-ink-soft">
+				<div className="flex items-center gap-3 font-mono text-xs text-ink-soft">
 					<span className="flex items-center gap-1.5">
 						<span className="h-2 w-2 rounded-full bg-important" />
 						Important
@@ -81,7 +81,7 @@ export default function Calendar({ analytics, year, month }: CalendarProps) {
 						return (
 							<div
 								key={wd}
-								className={`pb-1 text-center text-xs font-semibold uppercase tracking-wide ${
+								className={`pb-1 text-center font-mono text-xs font-medium uppercase tracking-wide ${
 									isToday ? "text-accent" : "text-ink-faint"
 								}`}
 							>
@@ -129,11 +129,11 @@ export default function Calendar({ analytics, year, month }: CalendarProps) {
 									<div className="mt-auto flex flex-col gap-1.5">
 										{/* Important callout — the headline */}
 										{data.IMPORTANT > 0 && (
-											<div className="hidden  items-baseline gap-1 md:flex">
-												<span className="text-lg font-semibold tabular-nums text-important leading-none">
+											<div className="hidden items-baseline gap-1 md:flex">
+												<span className="font-mono text-lg font-semibold tabular-nums leading-none text-important">
 													{data.IMPORTANT}
 												</span>
-												<span className="text-[10px] uppercase tracking-wide text-ink-faint">
+												<span className="font-mono text-[10px] uppercase tracking-wider text-ink-faint">
 													important
 												</span>
 											</div>
@@ -141,7 +141,7 @@ export default function Calendar({ analytics, year, month }: CalendarProps) {
 
 										{/* Total + composition bar */}
 										<div className="flex flex-col gap-1">
-											<span className="hidden text-[11px] tabular-nums text-ink-soft md:block">
+											<span className="hidden font-mono text-[11px] tabular-nums text-ink-soft md:block">
 												{data.total} total
 											</span>
 											<div className="flex h-1.5 overflow-hidden rounded-full bg-canvas">

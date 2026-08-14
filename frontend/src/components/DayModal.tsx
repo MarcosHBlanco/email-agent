@@ -56,10 +56,10 @@ export default function DayModal({ day, onClose }: DayModalProps) {
 						<div className="mx-auto mb-4 h-1 w-10 rounded-full bg-border-strong" />
 
 						{/* Date heading */}
-						<h2 className="text-base font-semibold text-ink">
+						<h2 className="font-serif text-lg font-semibold tracking-tight text-ink">
 							{formatDate(day.date)}
 						</h2>
-						<p className="mt-0.5 text-sm text-ink-soft">
+						<p className="mt-0.5 font-mono text-xs text-ink-soft">
 							{day.total} email{day.total === 1 ? "" : "s"} processed
 						</p>
 
@@ -118,7 +118,7 @@ function CategoryRow({
 		<div className="flex items-center gap-2.5">
 			<span className={`h-2.5 w-2.5 rounded-full ${dot}`} />
 			<span className="text-sm text-ink-soft">{label}</span>
-			<span className="ml-auto text-sm font-semibold tabular-nums text-ink">
+			<span className="ml-auto font-mono text-sm font-semibold tabular-nums text-ink">
 				{count}
 			</span>
 		</div>

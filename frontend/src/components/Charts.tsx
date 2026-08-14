@@ -59,7 +59,7 @@ export default function Charts({ analytics }: ChartsProps) {
 		<div className="mx-auto w-full max-w-5xl space-y-8 p-4 md:p-6">
 			{/* Chart 1 — stacked composition over time */}
 			<section>
-				<h3 className="mb-3 text-sm font-semibold text-ink">
+				<h3 className="mb-3 font-serif text-lg font-semibold tracking-tight text-ink">
 					Email composition over time
 				</h3>
 				<div className="rounded-xl border border-border bg-surface p-4 shadow-sm">
@@ -114,7 +114,7 @@ export default function Charts({ analytics }: ChartsProps) {
 
 			{/* Chart 2 — important volume trend */}
 			<section>
-				<h3 className="mb-3 text-sm font-semibold text-ink">
+				<h3 className="mb-3 font-serif text-lg font-semibold tracking-tight text-ink">
 					Important emails trend
 				</h3>
 				<div className="rounded-xl border border-border bg-surface p-4 shadow-sm">
