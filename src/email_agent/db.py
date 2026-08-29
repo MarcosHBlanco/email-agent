@@ -230,7 +230,7 @@ def save_categorization(
             """
             INSERT INTO email_categorizations
                 (user_id, run_id, gmail_id, sender, subject,
-                 category, reason, summary, is_read, categorized_at)
+                 category, reason, summary, is_read, categorized_at, received_at)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, FALSE, %s, %s)
             ON CONFLICT (user_id, gmail_id) DO NOTHING
             """,
