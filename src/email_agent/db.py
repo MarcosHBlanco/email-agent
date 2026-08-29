@@ -130,6 +130,7 @@ def init_db() -> None:
                 is_read BOOLEAN NOT NULL DEFAULT FALSE,
                 is_trashed BOOLEAN NOT NULL DEFAULT FALSE,
                 categorized_at TEXT NOT NULL,
+                received_at TIMESTAMPTZ,
                 UNIQUE (user_id, gmail_id),
                 FOREIGN KEY (user_id) REFERENCES users (id),
                 FOREIGN KEY (run_id) REFERENCES runs (id)
@@ -184,7 +185,8 @@ def init_db() -> None:
         # because init_db() runs on every server start.
         conn.execute("""
             ALTER TABLE email_categorizations
-            ADD COLUMN IF NOT EXISTS is_trashed BOOLEAN NOT NULL DEFAULT FALSE
+            ADD COLUMN IF NOT EXISTS is_trashed BOOLEAN NOT NULL DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS received_at TIMESTAMPTZ
             """)
 
 
@@ -214,6 +216,7 @@ def save_categorization(
     category: str,
     reason: str,
     summary: str,
+    received_at: datetime | None,
 ) -> None:
     """Insert one email's categorization. One row per (user, email), forever.
 
@@ -228,7 +231,7 @@ def save_categorization(
             INSERT INTO email_categorizations
                 (user_id, run_id, gmail_id, sender, subject,
                  category, reason, summary, is_read, categorized_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, FALSE, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, FALSE, %s, %s)
             ON CONFLICT (user_id, gmail_id) DO NOTHING
             """,
             (
@@ -241,6 +244,7 @@ def save_categorization(
                 reason,
                 summary,
                 _utc_now_iso(),
+                received_at,
             ),
         )
 
@@ -338,6 +342,51 @@ def get_todays_digest(user_id: int) -> dict | None:
         "generated_at": _utc_now_iso(),
         "buckets": buckets,
     }
+
+
+def get_all_emails(user_id: int, limit: int, offset: int) -> dict:
+    """Paginated flat list of all non-trashed emails, newest first.
+
+    Unlike get_todays_digest, this has no date bound and no bucketing — it's
+    the inbox/archive read model. Same rows, different question: "everything,
+    in time order" rather than "today, grouped by importance".
+
+    Pagination lives in the SQL (LIMIT/OFFSET), so the database sends only one
+    page over the wire — never the whole table. We fetch limit+1 rows as a
+    cheap way to know whether a further page exists, without a second COUNT
+    query.
+    """
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT gmail_id, sender, subject, category, reason, summary, is_read
+            FROM email_categorizations
+            WHERE user_id = %s
+              AND is_trashed = FALSE
+            ORDER BY categorized_at DESC, id DESC
+            LIMIT %s OFFSET %s
+            """,
+            (user_id, limit + 1, offset),
+        ).fetchall()
+
+    has_more = len(rows) > limit
+    rows = rows[:limit]  # drop the sentinel row if present
+
+    emails = [
+        {
+            "gmail_id": row["gmail_id"],
+            "sender": row["sender"],
+            "subject": row["subject"],
+            "summary": row["summary"],
+            "reason": row["reason"],
+            "is_read": bool(row["is_read"]),
+            "category": row[
+                "category"
+            ],  # flat list needs category per-row (was the bucket key before)
+        }
+        for row in rows
+    ]
+    return {"emails": emails, "has_more": has_more}
 
 
 def mark_email_read(user_id: int, gmail_id: str) -> bool:

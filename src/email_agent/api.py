@@ -225,6 +225,20 @@ def get_latest_digest(user: dict = Depends(get_current_user)) -> dict:
     return {"digest": digest}
 
 
+@app.get("/emails/all")
+def get_all_emails(
+    limit: int = 50,
+    offset: int = 0,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Paginated flat list of all non-trashed emails, newest first."""
+    # Clamp limit so a caller can't request a huge page and bypass pagination
+    # (e.g. ?limit=100000 would load the whole table — the thing we're avoiding).
+    limit = max(1, min(limit, 100))
+    offset = max(0, offset)
+    return db.get_all_emails(user["id"], limit, offset)
+
+
 @app.post("/digest/process")
 def process_digest(user: dict = Depends(get_current_user)) -> dict:
     """WRITE path: run a new processing pass (fetch, categorize, store).

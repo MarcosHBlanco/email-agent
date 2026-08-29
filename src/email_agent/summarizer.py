@@ -64,6 +64,7 @@ def run_digest(user_id: int) -> dict | None:
             category=result.category,
             reason=result.reason,
             summary=result.summary,
+            received_at=email.get("received_at"),
         )
         run_buckets[result.category].append(
             {

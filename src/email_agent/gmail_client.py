@@ -36,6 +36,17 @@ class GmailReauthError(Exception):
     reconnect their Gmail (e.g. Testing-mode 7-day expiry, or a scope change)."""
 
 
+def _parse_internal_date(internal_date: str | None) -> datetime | None:
+    """Gmail's internalDate is a string of milliseconds since the Unix epoch,
+    UTC. Convert to a timezone-aware datetime. Returns None if absent, so a
+    malformed message can't break categorization — the received time is
+    metadata, not essential.
+    """
+    if not internal_date:
+        return None
+    return datetime.fromtimestamp(int(internal_date) / 1000, tz=timezone.utc)
+
+
 def get_email_service(user_id: int) -> Any:
     """Build a Gmail service for a specific user from their stored tokens.
 
@@ -140,6 +151,7 @@ def _simplify_email(raw_email: dict) -> dict:
     return {
         "id": raw_email["id"],
         "thread_id": raw_email.get("threadId"),
+        "received_at": _parse_internal_date(raw_email.get("internalDate")),
         "snippet": raw_email.get("snippet", ""),
         "subject": headers.get("subject", "(no subject)"),
         "sender": headers.get("from", "(unknown sender)"),
