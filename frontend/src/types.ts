@@ -8,6 +8,7 @@ export interface EmailItem {
 	summary: string;
 	reason: string;
 	is_read: boolean;
+	received_at?: string | null;
 }
 
 export interface DigestBuckets {

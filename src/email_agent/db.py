@@ -310,7 +310,7 @@ def get_todays_digest(user_id: int) -> dict | None:
     with get_connection() as conn:
         rows = conn.execute(
             """
-            SELECT gmail_id, sender, subject, category, reason, summary, is_read
+            SELECT gmail_id, sender, subject, category, reason, summary, is_read, received_at
             FROM email_categorizations
             WHERE user_id = %s
               AND is_trashed = FALSE
@@ -334,6 +334,9 @@ def get_todays_digest(user_id: int) -> dict | None:
                 "summary": row["summary"],
                 "reason": row["reason"],
                 "is_read": bool(row["is_read"]),
+                "received_at": (
+                    row["received_at"].isoformat() if row["received_at"] else None
+                ),
             }
         )
 
@@ -359,7 +362,7 @@ def get_all_emails(user_id: int, limit: int, offset: int) -> dict:
     with get_connection() as conn:
         rows = conn.execute(
             """
-            SELECT gmail_id, sender, subject, category, reason, summary, is_read
+            SELECT gmail_id, sender, subject, category, reason, summary, is_read, received_at
             FROM email_categorizations
             WHERE user_id = %s
               AND is_trashed = FALSE
@@ -380,9 +383,10 @@ def get_all_emails(user_id: int, limit: int, offset: int) -> dict:
             "summary": row["summary"],
             "reason": row["reason"],
             "is_read": bool(row["is_read"]),
-            "category": row[
-                "category"
-            ],  # flat list needs category per-row (was the bucket key before)
+            "received_at": (
+                row["received_at"].isoformat() if row["received_at"] else None
+            ),
+            "category": row["category"],
         }
         for row in rows
     ]

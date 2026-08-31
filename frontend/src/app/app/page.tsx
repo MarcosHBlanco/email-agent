@@ -19,14 +19,14 @@ import Header from "@/components/Header";
 import Charts from "@/components/Charts";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
-
+import AllEmailsView from "@/components/AllEmailsView";
 import { AnimatePresence, motion } from "motion/react";
 
 import { API_BASE } from "@/lib/config";
 
 type CategoryFilter = "ALL" | "IMPORTANT" | "ROUTINE" | "JUNK";
 type MobileView = "categories" | "list" | "detail";
-type AppMode = "digest" | "calendar" | "chart";
+type AppMode = "digest" | "all" | "calendar" | "chart";
 
 const CATEGORY_LABEL: Record<CategoryFilter, string> = {
 	ALL: "All",
@@ -461,6 +461,21 @@ export default function Home() {
 						</div>
 					</>
 				)}
+
+				{/* ALL EMAILS MODE */}
+				<div
+					className={`absolute inset-0 z-10 flex h-full w-full flex-col bg-surface transition-transform duration-300 ease-out ${
+						activeMode === "all" ? "translate-x-0" : "translate-x-full"
+					} md:z-0 md:translate-x-0 md:transition-none ${
+						activeMode === "all" ? "md:static md:flex md:flex-1" : "md:hidden"
+					}`}
+				>
+					<AllEmailsView
+						selectedEmailId={selectedEmailId}
+						onSelectEmail={setSelectedEmailId}
+						onBackToNav={() => setActiveMode("digest")}
+					/>
+				</div>
 
 				{/* CALENDAR MODE */}
 				<div
