@@ -10,6 +10,8 @@ interface EmailDetailProps {
 	selectedEmailId: string | null;
 	processing: boolean;
 	onDelete: (gmailId: string) => void;
+	actionLabel?: string; // the destructive/primary action button text — defaults to "Trash"
+	showReply?: boolean; // whether to show Reply/Reply-all — defaults to true
 }
 
 type Category = "IMPORTANT" | "ROUTINE" | "JUNK";
@@ -32,6 +34,8 @@ export default function EmailDetail({
 	selectedEmailId,
 	processing,
 	onDelete,
+	actionLabel = "Trash",
+	showReply = true,
 }: EmailDetailProps) {
 	const found =
 		selectedEmailId !== null ? findEmailById(digest, selectedEmailId) : null;
@@ -60,6 +64,8 @@ export default function EmailDetail({
 						email={found.email}
 						category={found.category}
 						onDelete={onDelete}
+						actionLabel={actionLabel}
+						showReply={showReply}
 					/>
 				)}
 			</motion.div>
@@ -154,10 +160,14 @@ function EmailContent({
 	email,
 	category,
 	onDelete,
+	actionLabel,
+	showReply,
 }: {
 	email: EmailItem;
 	category: Category;
 	onDelete: (gmailId: string) => void;
+	actionLabel: string;
+	showReply: boolean;
 }) {
 	const style = CATEGORY_STYLE[category];
 	const [replyMode, setReplyMode] = useState<"reply" | "reply-all" | null>(
@@ -214,23 +224,27 @@ function EmailContent({
 			) : (
 				<div className="border-t border-border px-6 py-3">
 					<div className="flex flex-wrap gap-2">
-						<button
-							onClick={() => setReplyMode("reply")}
-							className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-soft transition-colors hover:border-accent hover:text-ink"
-						>
-							Reply
-						</button>
-						<button
-							onClick={() => setReplyMode("reply-all")}
-							className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-soft transition-colors hover:border-accent hover:text-ink"
-						>
-							Reply all
-						</button>
+						{showReply && (
+							<>
+								<button
+									onClick={() => setReplyMode("reply")}
+									className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-soft transition-colors hover:border-accent hover:text-ink"
+								>
+									Reply
+								</button>
+								<button
+									onClick={() => setReplyMode("reply-all")}
+									className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-soft transition-colors hover:border-accent hover:text-ink"
+								>
+									Reply all
+								</button>
+							</>
+						)}
 						<button
 							onClick={() => onDelete(email.gmail_id)}
 							className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-soft transition-colors hover:border-important hover:text-important"
 						>
-							Trash
+							{actionLabel}
 						</button>
 
 						<a

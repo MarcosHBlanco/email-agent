@@ -23,10 +23,11 @@ import AllEmailsView from "@/components/AllEmailsView";
 import { AnimatePresence, motion } from "motion/react";
 
 import { API_BASE } from "@/lib/config";
+import TrashView from "@/components/TrashView";
 
 type CategoryFilter = "ALL" | "IMPORTANT" | "ROUTINE" | "JUNK";
 type MobileView = "categories" | "list" | "detail";
-type AppMode = "digest" | "all" | "calendar" | "chart";
+type AppMode = "digest" | "all" | "trash" | "calendar" | "chart";
 
 const CATEGORY_LABEL: Record<CategoryFilter, string> = {
 	ALL: "All",
@@ -471,6 +472,23 @@ export default function Home() {
 					}`}
 				>
 					<AllEmailsView
+						key={activeMode === "all" ? "all-open" : "all-closed"}
+						selectedEmailId={selectedEmailId}
+						onSelectEmail={setSelectedEmailId}
+						onBackToNav={() => setActiveMode("digest")}
+					/>
+				</div>
+
+				{/* TRASH MODE */}
+				<div
+					className={`absolute inset-0 z-10 flex h-full w-full flex-col bg-surface transition-transform duration-300 ease-out ${
+						activeMode === "trash" ? "translate-x-0" : "translate-x-full"
+					} md:z-0 md:translate-x-0 md:transition-none ${
+						activeMode === "trash" ? "md:static md:flex md:flex-1" : "md:hidden"
+					}`}
+				>
+					<TrashView
+						key={activeMode === "trash" ? "trash-open" : "trash-close"}
 						selectedEmailId={selectedEmailId}
 						onSelectEmail={setSelectedEmailId}
 						onBackToNav={() => setActiveMode("digest")}

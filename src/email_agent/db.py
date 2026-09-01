@@ -366,7 +366,7 @@ def get_all_emails(user_id: int, limit: int, offset: int) -> dict:
             FROM email_categorizations
             WHERE user_id = %s
               AND is_trashed = FALSE
-            ORDER BY categorized_at DESC, id DESC
+            ORDER BY received_at DESC NULLS LAST, id DESC
             LIMIT %s OFFSET %s
             """,
             (user_id, limit + 1, offset),
@@ -375,6 +375,46 @@ def get_all_emails(user_id: int, limit: int, offset: int) -> dict:
     has_more = len(rows) > limit
     rows = rows[:limit]  # drop the sentinel row if present
 
+    emails = [
+        {
+            "gmail_id": row["gmail_id"],
+            "sender": row["sender"],
+            "subject": row["subject"],
+            "summary": row["summary"],
+            "reason": row["reason"],
+            "is_read": bool(row["is_read"]),
+            "received_at": (
+                row["received_at"].isoformat() if row["received_at"] else None
+            ),
+            "category": row["category"],
+        }
+        for row in rows
+    ]
+    return {"emails": emails, "has_more": has_more}
+
+
+def get_trashed_emails(user_id: int, limit: int, offset: int) -> dict:
+    """Paginated flat list of TRASHED emails, newest first.
+
+    Identical to get_all_emails but for is_trashed = TRUE — the Trash view.
+    Kept as its own function rather than a flag on get_all_emails: two named
+    functions read clearly at the call site, where a boolean argument would
+    not.
+    """
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT gmail_id, sender, subject, category, reason, summary, is_read, received_at
+            FROM email_categorizations
+            WHERE user_id = %s
+              AND is_trashed = TRUE
+            ORDER BY received_at DESC NULLS LAST, id DESC
+            LIMIT %s OFFSET %s
+            """,
+            (user_id, limit + 1, offset),
+        ).fetchall()
+    has_more = len(rows) > limit
+    rows = rows[:limit]
     emails = [
         {
             "gmail_id": row["gmail_id"],

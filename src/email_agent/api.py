@@ -239,6 +239,18 @@ def get_all_emails(
     return db.get_all_emails(user["id"], limit, offset)
 
 
+@app.get("/emails/trash")
+def get_trashed_emails(
+    limit: int = 50,
+    offset: int = 0,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Paginated flat list of trashed emails, newest first."""
+    limit = max(1, min(limit, 100))
+    offset = max(0, offset)
+    return db.get_trashed_emails(user["id"], limit, offset)
+
+
 @app.post("/digest/process")
 def process_digest(user: dict = Depends(get_current_user)) -> dict:
     """WRITE path: run a new processing pass (fetch, categorize, store).

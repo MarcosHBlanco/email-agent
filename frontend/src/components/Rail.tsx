@@ -3,7 +3,7 @@ import { Digest } from "@/types";
 import { motion } from "motion/react";
 
 type CategoryFilter = "ALL" | "IMPORTANT" | "ROUTINE" | "JUNK";
-type AppMode = "digest" | "all" | "calendar" | "chart";
+type AppMode = "digest" | "all" | "trash" | "calendar" | "chart";
 
 interface RailProps {
 	digest: Digest | null;
@@ -110,6 +110,19 @@ export default function Rail({
 				>
 					<span className="text-ink-faint">▸</span>
 					All emails
+				</button>
+
+				{/* TRASH — mode switcher */}
+				<button
+					onClick={() => onModeChange("trash")}
+					className={`mt-0.5 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium transition-colors ${
+						activeMode === "trash"
+							? "bg-surface text-ink shadow-sm"
+							: "text-ink-soft hover:bg-surface-hover hover:text-ink"
+					}`}
+				>
+					<span className="text-ink-faint">▸</span>
+					Trash
 				</button>
 
 				{/* CALENDAR — mode switcher */}
