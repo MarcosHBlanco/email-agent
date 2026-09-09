@@ -2,13 +2,10 @@
 
 import os
 import base64
-
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from email.utils import getaddresses, formataddr
-
-from datetime import datetime, timedelta, timezone
-from os import access
-from sqlite3 import connect
 from typing import Any
 
 from google.auth.transport.requests import Request
@@ -16,7 +13,7 @@ from google.oauth2.credentials import Credentials
 from google.auth.exceptions import RefreshError
 from googleapiclient.discovery import build
 
-from email_agent import db
+from email_agent import config, db
 
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.modify",  # read + trash/untrash + label changes
@@ -47,13 +44,32 @@ def _parse_internal_date(internal_date: str | None) -> datetime | None:
     return datetime.fromtimestamp(int(internal_date) / 1000, tz=timezone.utc)
 
 
+def _parse_expiry(raw: str) -> datetime | None:
+    if not raw:
+        return None
+    try:
+        expiry = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    # Google's library treats naive expiry as UTC.
+    if expiry.tzinfo is None:
+        expiry = expiry.replace(tzinfo=timezone.utc)
+    return expiry
+
+
+def _build_service(creds: Credentials) -> Any:
+    # cache_discovery=False avoids a shared on-disk cache that races across threads.
+    return build("gmail", "v1", credentials=creds, cache_discovery=False)
+
+
 def get_email_service(user_id: int) -> Any:
     """Build a Gmail service for a specific user from their stored tokens.
 
     Loads the user's encrypted connection, reconstructs credentials, refreshes
-    the access token if expired (re-saving-it), and returns a Gmail service.
+    the access token only if it is expired (or expiry is unknown), re-saves it,
+    and returns a Gmail service.
 
-    Raises GmailNotConnectedError if the user hans't connected their Gmail.
+    Raises GmailNotConnectedError if the user hasn't connected their Gmail.
     """
 
     connection = db.get_gmail_connection(user_id)
@@ -62,7 +78,7 @@ def get_email_service(user_id: int) -> Any:
             f"User {user_id} has not connected a Gmail account."
         )
 
-    # Reconstruct the Credentials object from out stored tokens
+    expiry = _parse_expiry(connection["token_expiry"])
     creds = Credentials(
         token=connection["access_token"],
         refresh_token=connection["refresh_token"],
@@ -70,26 +86,24 @@ def get_email_service(user_id: int) -> Any:
         client_id=os.environ["GOOGLE_CLIENT_ID"],
         client_secret=os.environ["GOOGLE_CLIENT_SECRET"],
         scopes=SCOPES,
+        expiry=expiry.replace(tzinfo=None) if expiry else None,
     )
 
-    # We cannot trust creds.valid here: when credentials are reconstructed
-    # without an expiry (which is always, given the constructor above),
-    # creds.expiry is None, the library treats that as "not expired", and
-    # creds.valid returns True even for a dead token. So we proactively
-    # refresh at this chokepoint — forcing the token to prove itself HERE,
-    # inside our try/except, rather than letting a later .execute() trigger
-    # a lazy refresh somewhere we're not guarding.
-    if creds.refresh_token:
+    # Reconstructing Credentials without expiry made creds.valid always True.
+    # We now pass expiry when we have it, and only refresh when the token is
+    # expired or we cannot tell — not on every trash/body/reply call.
+    needs_refresh = creds.refresh_token and (
+        expiry is None
+        or expiry
+        <= datetime.now(timezone.utc) + timedelta(seconds=config.TOKEN_REFRESH_SKEW_SECONDS)
+    )
+    if needs_refresh:
         try:
             creds.refresh(Request())
         except RefreshError as e:
-            # Refresh token is dead: revoked, expired under Testing mode's
-            # 7-day rule, or invalidated by a scope change. Translate Google's
-            # low-level error into our domain language.
             raise GmailReauthError(
                 f"User {user_id}'s Gmail token is no longer valid; reconnect required."
             ) from e
-        # creds.token is now a fresh access token — save it back (encrypted).
         db.save_gmail_connection(
             user_id=user_id,
             google_email=connection["google_email"],
@@ -97,7 +111,10 @@ def get_email_service(user_id: int) -> Any:
             refresh_token=creds.refresh_token or connection["refresh_token"],
             token_expiry=creds.expiry.isoformat() if creds.expiry else "",
         )
-    service = build("gmail", "v1", credentials=creds)
+    service = _build_service(creds)
+    # google-api-python-client services are not thread-safe; parallel fetch
+    # clones from this Credentials object (already refreshed, if needed).
+    service._email_agent_creds = creds  # type: ignore[attr-defined]
     return service
 
 
@@ -125,19 +142,40 @@ def fetch_recent_emails(
     )
     message_refs = list_response.get("messages", [])
 
-    emails = []
-    for ref in message_refs:
-        # metadata format returns headers + snippet without the message body —
-        # everything _simplify_email needs, at ~14% of the payload size. The
-        # digest never uses the body; it's fetched on demand when a user opens
-        # an email. (Measured: 33.4KB -> 4.7KB per message.)
+    emails: list[dict] = []
+    if not message_refs:
+        return emails
+
+    creds = getattr(service, "_email_agent_creds", None)
+    if creds is None:
+        # Fallback: sequential fetch if we weren't built via get_email_service.
+        for ref in message_refs:
+            full = (
+                service.users()
+                .messages()
+                .get(userId="me", id=ref["id"], format="metadata")
+                .execute()
+            )
+            emails.append(_simplify_email(full))
+        return emails
+    workers = min(config.GMAIL_FETCH_WORKERS, len(message_refs))
+
+    def _fetch_one(gmail_id: str) -> dict:
+        svc = _build_service(creds)
         full = (
-            service.users()
+            svc.users()
             .messages()
-            .get(userId="me", id=ref["id"], format="metadata")
+            .get(userId="me", id=gmail_id, format="metadata")
             .execute()
         )
-        emails.append(_simplify_email(full))
+        return _simplify_email(full)
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {
+            pool.submit(_fetch_one, ref["id"]): ref["id"] for ref in message_refs
+        }
+        for future in as_completed(futures):
+            emails.append(future.result())
 
     return emails
 

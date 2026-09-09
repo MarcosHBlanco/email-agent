@@ -5,11 +5,16 @@ It returns structured data; presentation (terminal text, web JSON) is the
 caller's responsibility.
 """
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 
 from email_agent import config, db
-from email_agent.categorizer import categorize_email
+from email_agent.categorizer import CategorizationResult, categorize_email
 from email_agent.gmail_client import get_email_service, fetch_recent_emails
+
+
+class DigestInProgressError(Exception):
+    """Another digest is already running for this user."""
 
 
 def _hours_since_last_run(user_id: int) -> int:
@@ -29,7 +34,22 @@ def _hours_since_last_run(user_id: int) -> int:
 
 
 def run_digest(user_id: int) -> dict | None:
-    """Run one digest cycle; return TODAY'S accumulated digest (all runs)."""
+    """Run one digest cycle; return TODAY'S accumulated digest (all runs).
+
+    Takes a per-user lock so a double-click or overlapping cron cannot pay
+    Claude twice for the same window. UNIQUE(gmail_id) is the DB safety net;
+    the lock is what actually saves the API calls.
+    """
+    if not db.try_acquire_digest_lock(user_id):
+        raise DigestInProgressError(f"Digest already running for user {user_id}")
+
+    try:
+        return _run_digest_locked(user_id)
+    finally:
+        db.release_digest_lock(user_id)
+
+
+def _run_digest_locked(user_id: int) -> dict | None:
     hours_back = _hours_since_last_run(user_id)
     window_start = (
         datetime.now(timezone.utc) - timedelta(hours=hours_back)
@@ -50,11 +70,21 @@ def run_digest(user_id: int) -> dict | None:
         user_id=user_id, window_start=window_start, emails_processed=len(new_emails)
     )
 
-    # Per-run buckets, used only for the audit snapshot in the digests table.
     run_buckets: dict[str, list[dict]] = {"IMPORTANT": [], "ROUTINE": [], "JUNK": []}
 
-    for email in new_emails:
-        result = categorize_email(email, preferences)
+    categorized: list[tuple[dict, CategorizationResult]] = []
+    if new_emails:
+        workers = min(config.CATEGORIZE_WORKERS, len(new_emails))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {
+                pool.submit(categorize_email, email, preferences): email
+                for email in new_emails
+            }
+            for future in as_completed(futures):
+                email = futures[future]
+                categorized.append((email, future.result()))
+
+    for email, result in categorized:
         db.save_categorization(
             user_id=user_id,
             run_id=run_id,
@@ -76,8 +106,6 @@ def run_digest(user_id: int) -> dict | None:
             }
         )
 
-    # Audit record of THIS run only (what was new). The user-facing digest is
-    # today's accumulation, built separately below.
     run_data = {
         "total": len(new_emails),
         "generated_at": datetime.now(timezone.utc).isoformat(),

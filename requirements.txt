@@ -14,6 +14,8 @@ anyio==4.13.0
 bcrypt==5.0.0
     # via email-agent
 black==26.5.1
+bleach==6.4.0
+    # via email-agent
 certifi==2026.5.20
     # via
     #   httpcore
@@ -106,6 +108,8 @@ psycopg==3.3.4
     # via email-agent
 psycopg-binary==3.3.4 ; implementation_name != 'pypy'
     # via psycopg
+psycopg-pool==3.3.1
+    # via email-agent
 pyasn1==0.6.3
     # via pyasn1-modules
 pyasn1-modules==0.4.2
@@ -145,6 +149,7 @@ typing-extensions==4.15.0
     #   anyio
     #   fastapi
     #   psycopg
+    #   psycopg-pool
     #   pydantic
     #   pydantic-core
     #   starlette
@@ -163,3 +168,5 @@ urllib3==2.7.0
     #   sentry-sdk
 uvicorn==0.49.0
     # via email-agent
+webencodings==0.6.1
+    # via bleach

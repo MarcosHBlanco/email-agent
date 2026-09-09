@@ -1,35 +1,47 @@
 """Shared pytest fixtures for the test suite."""
 
-import tempfile
 import os
 
 import pytest
+from dotenv import load_dotenv
 
-from email_agent import db, config
+from email_agent import db
+
+load_dotenv()
+
+# NEVER point this at the production DATABASE_URL. Tests truncate tables.
+# Export TEST_DATABASE_URL to a disposable Postgres database to run them.
+_TABLES = (
+    "digest_locks",
+    "oauth_states",
+    "gmail_connections",
+    "sessions",
+    "digests",
+    "email_categorizations",
+    "runs",
+    "users",
+)
 
 
 @pytest.fixture
-def temp_db():
-    """Give each test a fresh, temporary database.
+def temp_db(monkeypatch):
+    """Give each test a fresh schema on TEST_DATABASE_URL only."""
+    test_url = os.environ.get("TEST_DATABASE_URL")
+    if not test_url:
+        pytest.skip("Set TEST_DATABASE_URL to a disposable Postgres DB to run these tests")
+    if not os.environ.get("FERNET_KEY"):
+        pytest.skip("FERNET_KEY is required for database tests")
 
-    Creates a brand-new empty database file, points the app's DB_PATH at it,
-    initializes the schema, runs the test, then deletes the file afterward.
-    The real database is never touched.
-    """
-    # Make a temporary file path for this test's database.
-    fd, path = tempfile.mkstemp(suffix=".db")
-    os.close(fd)  # we just need the path; close the file handle
-
-    # Remember the real DB path, then point the app at the temp one.
-    original_path = config.DB_PATH
-    config.DB_PATH = path
-
-    # Build the fresh schema in the temp database.
+    monkeypatch.setenv("DATABASE_URL", test_url)
+    db.close_pool()
+    db.init_pool()
     db.init_db()
 
-    # Hand control to the test.
+    with db.get_connection() as conn:
+        conn.execute("TRUNCATE TABLE " + ", ".join(_TABLES) + " CASCADE")
+
     yield
 
-    # Cleanup: restore the real path and delete the temp database.
-    config.DB_PATH = original_path
-    os.remove(path)
+    with db.get_connection() as conn:
+        conn.execute("TRUNCATE TABLE " + ", ".join(_TABLES) + " CASCADE")
+    db.close_pool()

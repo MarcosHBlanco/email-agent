@@ -44,10 +44,12 @@ def categorize_email(
         sender=email.get("sender", "(unknown sender)"),
         snippet=email.get("snippet", ""),
     )
-    full_prompt = system_prompt + "\n\n" + user_message
 
+    # Keep untrusted email out of the system channel — ask_claude sends
+    # these as separate API fields, not one concatenated user string.
     raw_response = ask_claude(
-        full_prompt,
+        user_message,
+        system=system_prompt,
         max_tokens=config.CATEGORIZATION_MAX_TOKENS,
         model=config.CATEGORIZATION_MODEL,
     )

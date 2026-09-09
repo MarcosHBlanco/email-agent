@@ -1,6 +1,8 @@
 """Tests for the auth module: password hashing and sessions."""
 
-from email_agent import auth, db
+import pytest
+
+from email_agent import auth, config, db
 
 
 def test_hash_and_verify_correct_password():
@@ -16,30 +18,42 @@ def test_verify_rejects_wrong_password():
     assert auth.verify_password("wrongpassword", hashed) is False
 
 
+def test_hash_rejects_bcrypt_overflow():
+    """bcrypt would silently truncate — we refuse instead."""
+    too_long = "a" * (config.BCRYPT_MAX_PASSWORD_BYTES + 1)
+    with pytest.raises(ValueError):
+        auth.hash_password(too_long)
+    assert auth.verify_password(too_long, auth.hash_password("ok-password")) is False
+
+
+def test_normalize_email_lowercases_and_strips():
+    assert auth.normalize_email("  A@X.com ") == "a@x.com"
+
+
 def test_create_and_get_session(temp_db):
     """Creating a session, then looking it up, returns the right user."""
-    # Arrange: make a user to attach a session to.
     user_id = db.create_user("session@test.com", "fakehash")
-
-    # Act: create a session for that user.
     token = auth.create_session(user_id)
-
-    # Assert: looking up the token returns that user's id.
     assert auth.get_session_user(token) == user_id
+
+
+def test_session_token_is_hashed_at_rest(temp_db):
+    """A DB dump must not contain the cookie value."""
+    user_id = db.create_user("hashsess@test.com", "fakehash")
+    token = auth.create_session(user_id)
+    with db.get_connection() as conn:
+        row = conn.execute("SELECT id FROM sessions").fetchone()
+    assert row is not None
+    assert row["id"] != token
+    assert row["id"] == auth.hash_session_token(token)
 
 
 def test_delete_session_revokes_it(temp_db):
     """A deleted session should no longer resolve to a user."""
     user_id = db.create_user("revoke@test.com", "fakehash")
     token = auth.create_session(user_id)
-
-    # Confirm it works first...
     assert auth.get_session_user(token) == user_id
-
-    # ...then delete it...
     auth.delete_session(token)
-
-    # ...and confirm it's gone.
     assert auth.get_session_user(token) is None
 
 

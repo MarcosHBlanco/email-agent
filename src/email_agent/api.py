@@ -8,14 +8,14 @@ Exposes two distinct paths:
 
 import os
 import secrets
-
-from click import prompt
-from fastapi.responses import RedirectResponse
-from google_auth_oauthlib.flow import Flow
-from googleapiclient.discovery import build
-from zoneinfo import ZoneInfo  # or hoist to module imports
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import asynccontextmanager
 from typing import Literal
+from zoneinfo import ZoneInfo
+
+from fastapi.responses import JSONResponse, RedirectResponse
+from google_auth_oauthlib.flow import Flow
+from googleapiclient.discovery import build
 
 from dotenv import load_dotenv
 
@@ -31,6 +31,10 @@ from email_agent.gmail_client import (
     send_reply,
 )
 from email_agent import personas
+from email_agent.csrf import csrf_is_allowed
+from email_agent.rate_limit import limiter
+from email_agent.sanitize import sanitize_reply_html
+from email_agent.summarizer import DigestInProgressError, run_digest
 
 import sentry_sdk
 
@@ -82,27 +86,47 @@ GOOGLE_CLIENT_CONFIG = {
     }
 }
 
-from fastapi import FastAPI, Response, Cookie, HTTPException, Depends, Header
+from fastapi import FastAPI, Response, Cookie, HTTPException, Depends, Header, Request
 from datetime import datetime, timezone
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
-from email_agent import db, auth
-from email_agent.summarizer import run_digest
+from email_agent import config, db, auth
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Run once on startup: make sure the schema exists before serving traffic.
-
-    Previously this only ran inside run_digest(), so a fresh database left
-    auth endpoints querying tables that didn't exist yet.
-    """
+    """Run once on startup: pool + schema before serving traffic."""
+    db.init_pool()
     db.init_db()
     yield
+    db.close_pool()
 
 
 app = FastAPI(title="Email Agent", lifespan=lifespan)
+
+
+def _client_ip(request: Request) -> str:
+    # Render (and most proxies) put the real client in the first X-Forwarded-For hop.
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+@app.middleware("http")
+async def csrf_origin_middleware(request: Request, call_next):
+    """Reject cross-site mutating requests whose Origin is not the frontend."""
+    if not csrf_is_allowed(
+        method=request.method,
+        path=request.url.path,
+        origin=request.headers.get("origin"),
+        frontend_url=FRONTEND_URL,
+        production=IS_PRODUCTION,
+        exempt_paths={"/cron/run-digests"},
+    ):
+        return JSONResponse({"detail": "CSRF check failed"}, status_code=403)
+    return await call_next(request)
 
 
 def _most_recent_slot(now_local: datetime) -> datetime | None:
@@ -130,7 +154,8 @@ def cron_run_digests(x_cron_secret: str = Header(default="")) -> dict:
         raise HTTPException(status_code=401, detail="Not authorized")
 
     now_utc = datetime.now(timezone.utc)
-    results = {"ran": [], "skipped": [], "failed": []}
+    results: dict = {"ran": [], "skipped": [], "failed": []}
+    due: list[int] = []
 
     for user in db.get_users_with_gmail():
         user_id = user["id"]
@@ -154,19 +179,33 @@ def cron_run_digests(x_cron_secret: str = Header(default="")) -> dict:
             results["skipped"].append(user_id)
             continue
 
+        due.append(user_id)
+
+    def _run_due(user_id: int) -> tuple[str, int, str | None]:
         try:
             run_digest(user_id)
-            results["ran"].append(user_id)
+            return ("ran", user_id, None)
+        except DigestInProgressError:
+            return ("skipped", user_id, None)
         except Exception as e:
-            # Handled here (we continue to the next user), so Sentry's
-            # automatic capture never sees it — the request still returns 200.
-            # Report explicitly, or a scheduled-run failure (e.g. Gmail token
-            # expiry) vanishes into the response with no alert.
             sentry_sdk.capture_exception(
                 e,
                 tags={"phase": "scheduled_digest", "user_id": user_id},
             )
-            results["failed"].append({"user_id": user_id, "error": str(e)})
+            return ("failed", user_id, str(e))
+
+    if due:
+        workers = min(config.CRON_USER_WORKERS, len(due))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = [pool.submit(_run_due, uid) for uid in due]
+            for future in as_completed(futures):
+                kind, user_id, err = future.result()
+                if kind == "ran":
+                    results["ran"].append(user_id)
+                elif kind == "skipped":
+                    results["skipped"].append(user_id)
+                else:
+                    results["failed"].append({"user_id": user_id, "error": err})
 
     return results
 
@@ -257,8 +296,20 @@ def process_digest(user: dict = Depends(get_current_user)) -> dict:
 
     Slow — calls Claude for each new email. Returns the freshly produced digest.
     """
+    if not limiter.allow(
+        f"digest:{user['id']}", limit=6, window_seconds=3600
+    ):
+        raise HTTPException(
+            status_code=429,
+            detail="Too many digest runs. Try again later.",
+        )
     try:
         digest = run_digest(user["id"])
+    except DigestInProgressError:
+        raise HTTPException(
+            status_code=429,
+            detail="A digest is already running for this account. Try again shortly.",
+        )
     except GmailNotConnectedError:
         raise HTTPException(
             status_code=409,
@@ -386,13 +437,18 @@ def get_daily_analytics(user: dict = Depends(get_current_user)) -> dict:
 
 
 class PreferencesUpdate(BaseModel):
-    profession: str = ""
-    interests: list[str] = []
-    important_senders: str = ""
-    important_keywords: str = ""
-    important_examples: str = ""
-    routine_examples: str = ""
-    junk_examples: str = ""
+    profession: str = Field(default="", max_length=200)
+    interests: list[str] = Field(default_factory=list, max_length=20)
+    important_senders: str = Field(default="", max_length=2000)
+    important_keywords: str = Field(default="", max_length=2000)
+    important_examples: str = Field(default="", max_length=4000)
+    routine_examples: str = Field(default="", max_length=4000)
+    junk_examples: str = Field(default="", max_length=4000)
+
+    @field_validator("interests")
+    @classmethod
+    def _cap_interest_items(cls, value: list[str]) -> list[str]:
+        return [item[:100] for item in value]
 
 
 @app.get("/preferences")
@@ -432,15 +488,43 @@ def get_personas() -> dict:
 # ===== Auth =====
 
 
-class AuthRequest(BaseModel):
+class LoginRequest(BaseModel):
     email: str
     password: str
-    timezone: str = "UTC"  # IANA name from the browser; UTC if not sent
+    timezone: str = "UTC"
+
+    @field_validator("email")
+    @classmethod
+    def _normalize_email(cls, value: str) -> str:
+        return auth.normalize_email(value)
+
+    @field_validator("password")
+    @classmethod
+    def _reject_bcrypt_overflow(cls, value: str) -> str:
+        if len(value.encode("utf-8")) > config.BCRYPT_MAX_PASSWORD_BYTES:
+            raise ValueError("Password is too long")
+        return value
+
+
+class SignupRequest(LoginRequest):
+    @field_validator("password")
+    @classmethod
+    def _password_policy(cls, value: str) -> str:
+        if len(value.encode("utf-8")) > config.BCRYPT_MAX_PASSWORD_BYTES:
+            raise ValueError("Password is too long")
+        if len(value) < config.MIN_PASSWORD_LENGTH:
+            raise ValueError("Password must be at least 8 characters")
+        return value
 
 
 @app.post("/auth/signup")
-def signup(body: AuthRequest, response: Response) -> dict:
+def signup(body: SignupRequest, response: Response, request: Request) -> dict:
     """Create a new user, log them in, and set their session cookie."""
+    if not limiter.allow(
+        f"signup:ip:{_client_ip(request)}", limit=5, window_seconds=3600
+    ):
+        raise HTTPException(status_code=429, detail="Too many signup attempts")
+
     # Email already used?
     existing = db.get_user_by_email(body.email)
     if existing is not None:
@@ -454,7 +538,7 @@ def signup(body: AuthRequest, response: Response) -> dict:
 
     # Hash the password and create the user.
     password_hash = auth.hash_password(body.password)
-    user_id = db.create_user(body.email, password_hash, body.timezone)
+    user_id = db.create_user(body.email, password_hash, tz)
 
     # Log them in immediately: create a session and set it as a cookie.
     token = auth.create_session(user_id)
@@ -470,8 +554,14 @@ def signup(body: AuthRequest, response: Response) -> dict:
 
 
 @app.post("/auth/login")
-def login(body: AuthRequest, response: Response) -> dict:
+def login(body: LoginRequest, response: Response, request: Request) -> dict:
     """Verify credentials, log the user in, and set their session cookie."""
+    ip = _client_ip(request)
+    if not limiter.allow(f"login:ip:{ip}", limit=10, window_seconds=900):
+        raise HTTPException(status_code=429, detail="Too many login attempts")
+    if not limiter.allow(f"login:email:{body.email}", limit=10, window_seconds=900):
+        raise HTTPException(status_code=429, detail="Too many login attempts")
+
     user = db.get_user_by_email(body.email)
 
     # Same error whether the email is unknown OR the password is wrong.
@@ -513,31 +603,32 @@ def get_me(user: dict = Depends(get_current_user)) -> dict:
     return {"id": user["id"], "email": user["email"]}
 
 
-def build_gmail_flow() -> Flow:
-    """Build a Gmail OAuth Flow with PKCE's code verifier disabled.
+def build_gmail_flow(*, code_verifier: str | None = None, generate_pkce: bool = False) -> Flow:
+    """Build a Gmail OAuth Flow.
 
-    This is a confidential client (we hold a client secret server-side), so the
-    secret provides the security PKCE would add for public clients. Disabling
-    the auto-generated code verifier avoids needing to persist it between the
-    connect and callback requests (which use separate Flow instances).
+    We are a confidential client (server-side secret) AND we use PKCE.
+    Google recommends PKCE for all clients; the verifier is stored next to
+    the CSRF state between /connect and /callback.
     """
     flow = Flow.from_client_config(
         GOOGLE_CLIENT_CONFIG,
         scopes=GMAIL_SCOPES,
         redirect_uri=REDIRECT_URI,
-        autogenerate_code_verifier=False,
+        autogenerate_code_verifier=generate_pkce,
     )
+    if code_verifier:
+        flow.code_verifier = code_verifier
     return flow
 
 
 @app.get("/auth/gmail/connect")
 def gmail_connect(user: dict = Depends(get_current_user)):
     """Start the Gmail OAuth flow: redirect the user to Google's consent screen."""
-    flow = build_gmail_flow()
+    flow = build_gmail_flow(generate_pkce=True)
 
-    # Generate a random state (CSRF ticket) and remember it for this user.
+    # Generate a random state (CSRF ticket) and remember it + PKCE verifier.
     state = secrets.token_urlsafe(32)
-    db.save_oauth_state(state, user["id"])
+    db.save_oauth_state(state, user["id"], flow.code_verifier or "")
 
     # Build Google's authorization URL.
     auth_url, _ = flow.authorization_url(
@@ -553,16 +644,15 @@ def gmail_connect(user: dict = Depends(get_current_user)):
 @app.get("/auth/gmail/callback")
 def gmail_callback(code: str, state: str):
     """Handle Google's redirect: verify state, exchange code for tokens, store them."""
-    # 1. Verify the state (CSRF check) — must match one we issued.
-    state_record = db.get_oauth_state(state)
+    # 1. Verify + consume the state (CSRF + TTL) in one statement.
+    state_record = db.consume_oauth_state(state)
     if state_record is None:
         raise HTTPException(status_code=400, detail="Invalid or expired state")
 
     user_id = state_record["user_id"]
-    db.delete_oauth_state(state)  # one-time use — consume it now
 
-    # 2. Exchange the authorization code for tokens.
-    flow = build_gmail_flow()
+    # 2. Exchange the authorization code for tokens (PKCE verifier required).
+    flow = build_gmail_flow(code_verifier=state_record.get("code_verifier"))
     flow.fetch_token(code=code)
     creds = flow.credentials
 
@@ -602,8 +692,8 @@ def gmail_status(user: dict = Depends(get_current_user)) -> dict:
 
 
 class ReplyRequest(BaseModel):
-    body_html: str
-    body_plain: str
+    body_html: str = Field(max_length=50_000)
+    body_plain: str = Field(max_length=50_000)
     reply_all: bool = False
 
 
@@ -635,7 +725,7 @@ def reply_to_email(
             original=original,
             my_email=connection["google_email"],
             body_plain=body.body_plain,
-            body_html=body.body_html,
+            body_html=sanitize_reply_html(body.body_html),
             reply_all=body.reply_all,
         )
         send_reply(service, raw, original.get("thread_id", ""))

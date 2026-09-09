@@ -16,34 +16,59 @@ get_todays_digest keep working exactly as before.
 
 import json
 import os
-
 from contextlib import contextmanager
 from collections.abc import Iterator
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 
-import psycopg
 from psycopg import Connection
-from psycopg import cursor
 from psycopg.rows import dict_row, DictRow
+from psycopg_pool import ConnectionPool
 
-from email_agent import crypto
+from email_agent import config, crypto
+
+_pool: ConnectionPool | None = None
+
+
+def init_pool() -> None:
+    """Create the process-wide connection pool. Call once at startup."""
+    global _pool
+    if _pool is not None:
+        return
+    _pool = ConnectionPool(
+        conninfo=os.environ["DATABASE_URL"],
+        min_size=1,
+        max_size=10,
+        timeout=30,
+        kwargs={"row_factory": dict_row},
+        open=True,
+    )
+
+
+def close_pool() -> None:
+    global _pool
+    if _pool is not None:
+        _pool.close()
+        _pool = None
 
 
 @contextmanager
 def get_connection() -> Iterator[Connection[DictRow]]:
-    """Open a Postgres connection, yield it, and always close it.
+    """Borrow a pooled connection, commit on success, roll back on error.
 
-    Yield type is annotated Connection[DictRow] so callers know every row is a
-    dict (row["col"] access). The # type: ignore covers psycopg's connect()
-    stub, which can't infer the row-factory switch — a known false positive.
+    Opening a TCP connection per query was the old SQLite habit and is the
+    wrong default on Postgres — pool checkout is cheap, connect() is not.
     """
-    conn: Connection[DictRow] = psycopg.connect(os.environ["DATABASE_URL"], row_factory=dict_row)  # type: ignore[arg-type]
-    try:
-        yield conn
-        conn.commit()
-    finally:
-        conn.close()
+    if _pool is None:
+        init_pool()
+    assert _pool is not None
+    with _pool.connection() as conn:
+        try:
+            yield conn  # type: ignore[misc]
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
 
 
 def _utc_now_iso() -> str:
@@ -174,6 +199,15 @@ def init_db() -> None:
                 state TEXT PRIMARY KEY,
                 user_id INTEGER NOT NULL,
                 created_at TEXT NOT NULL,
+                code_verifier TEXT,
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            )
+            """)
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS digest_locks (
+                user_id INTEGER PRIMARY KEY,
+                locked_at TIMESTAMPTZ NOT NULL,
                 FOREIGN KEY (user_id) REFERENCES users (id)
             )
             """)
@@ -187,6 +221,10 @@ def init_db() -> None:
             ALTER TABLE email_categorizations
             ADD COLUMN IF NOT EXISTS is_trashed BOOLEAN NOT NULL DEFAULT FALSE,
             ADD COLUMN IF NOT EXISTS received_at TIMESTAMPTZ
+            """)
+        conn.execute("""
+            ALTER TABLE oauth_states
+            ADD COLUMN IF NOT EXISTS code_verifier TEXT
             """)
 
 
@@ -497,50 +535,43 @@ def get_user_timezone(user_id: int) -> str:
 def get_daily_analytics(user_id: int) -> list[dict]:
     """Aggregate a user's categorizations by their LOCAL calendar day.
 
-    Previously this grouped on date(run_at), which is the UTC date — so for a
-    user in Vancouver (UTC-7/-8), anything processed after 4-5pm local landed
-    on the next day's square. We now convert each timestamp into the user's
-    timezone before deciding which day it belongs to.
-
-    No COUNT(DISTINCT) needed: UNIQUE(user_id, gmail_id) makes duplicate rows
-    impossible, so the invariant the DISTINCT used to defend is now enforced
-    by the schema itself.
+    Grouping happens in SQL so we do not pull every row into Python. Postgres
+    converts stored UTC (TEXT ISO timestamps) into the user's zone, then we
+    pivot counts per category.
     """
+    tz_name = get_user_timezone(user_id)
     try:
-        tz = ZoneInfo(get_user_timezone(user_id))
+        ZoneInfo(tz_name)
     except Exception:
-        tz = ZoneInfo("UTC")
+        tz_name = "UTC"
 
     with get_connection() as conn:
         rows = conn.execute(
             """
-            SELECT category, categorized_at
+            SELECT
+                (categorized_at::timestamptz AT TIME ZONE %s)::date::text AS date,
+                COUNT(*) FILTER (WHERE category = 'IMPORTANT') AS "IMPORTANT",
+                COUNT(*) FILTER (WHERE category = 'ROUTINE') AS "ROUTINE",
+                COUNT(*) FILTER (WHERE category = 'JUNK') AS "JUNK",
+                COUNT(*) AS total
             FROM email_categorizations
             WHERE user_id = %s
+            GROUP BY 1
+            ORDER BY 1
             """,
-            (user_id,),
+            (tz_name, user_id),
         ).fetchall()
 
-    by_day: dict[str, dict] = {}
-    for row in rows:
-        local_day = (
-            datetime.fromisoformat(row["categorized_at"])
-            .astimezone(tz)
-            .date()
-            .isoformat()
-        )
-        if local_day not in by_day:
-            by_day[local_day] = {
-                "date": local_day,
-                "IMPORTANT": 0,
-                "ROUTINE": 0,
-                "JUNK": 0,
-                "total": 0,
-            }
-        by_day[local_day][row["category"]] += 1
-        by_day[local_day]["total"] += 1
-
-    return sorted(by_day.values(), key=lambda d: d["date"])
+    return [
+        {
+            "date": row["date"],
+            "IMPORTANT": int(row["IMPORTANT"]),
+            "ROUTINE": int(row["ROUTINE"]),
+            "JUNK": int(row["JUNK"]),
+            "total": int(row["total"]),
+        }
+        for row in rows
+    ]
 
 
 def create_user(email: str, password_hash: str, tz: str = "UTC") -> int:
@@ -561,11 +592,14 @@ def create_user(email: str, password_hash: str, tz: str = "UTC") -> int:
 
 
 def get_user_by_email(email: str) -> dict | None:
-    """Find a user by email. Returns a dict with id, email, password_hash — or None."""
+    """Find a user by email (case-insensitive)."""
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT id, email, password_hash FROM users WHERE email = %s",
-            (email,),
+            """
+            SELECT id, email, password_hash FROM users
+            WHERE lower(email) = %s
+            """,
+            (email.strip().lower(),),
         ).fetchone()
         return dict(row) if row else None
 
@@ -677,30 +711,69 @@ def get_gmail_connection(user_id: int) -> dict | None:
     }
 
 
-def save_oauth_state(state: str, user_id: int) -> None:
-    """Store a pending OAuth state (CSRF ticket) for a user."""
+def save_oauth_state(state: str, user_id: int, code_verifier: str) -> None:
+    """Store a pending OAuth state (CSRF ticket) plus PKCE verifier."""
     created_at = datetime.now(timezone.utc).isoformat()
     with get_connection() as conn:
         conn.execute(
-            "INSERT INTO oauth_states (state, user_id, created_at) VALUES (%s, %s, %s)",
-            (state, user_id, created_at),
+            """
+            INSERT INTO oauth_states (state, user_id, created_at, code_verifier)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (state, user_id, created_at, code_verifier),
         )
 
 
-def get_oauth_state(state: str) -> dict | None:
-    """Look up a pending OAuth state. Returns {user_id, created_at} or None"""
+def consume_oauth_state(state: str) -> dict | None:
+    """Atomically look up, TTL-check, and delete an OAuth state.
+
+    DELETE ... RETURNING is one statement so two callbacks cannot both
+    redeem the same ticket (check-then-delete race).
+    """
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT user_id, created_at FROM oauth_states WHERE state = %s",
-            (state,),
+            """
+            DELETE FROM oauth_states
+            WHERE state = %s
+              AND created_at::timestamptz
+                  > NOW() - make_interval(mins => %s)
+            RETURNING user_id, code_verifier
+            """,
+            (state, config.OAUTH_STATE_TTL_MINUTES),
         ).fetchone()
         return dict(row) if row else None
 
 
-def delete_oauth_state(state: str) -> None:
-    """Delete a used OAuth state (one-time use)."""
+def try_acquire_digest_lock(user_id: int) -> bool:
+    """Take a per-user digest lock. False if another run is still in progress.
+
+    Stale rows (worker died) older than DIGEST_LOCK_STALE_MINUTES are stolen
+    so a crash cannot block the user forever.
+    """
     with get_connection() as conn:
-        conn.execute("DELETE FROM oauth_states WHERE state = %s", (state,))
+        conn.execute(
+            """
+            DELETE FROM digest_locks
+            WHERE user_id = %s
+              AND locked_at < NOW() - make_interval(mins => %s)
+            """,
+            (user_id, config.DIGEST_LOCK_STALE_MINUTES),
+        )
+        row = conn.execute(
+            """
+            INSERT INTO digest_locks (user_id, locked_at)
+            VALUES (%s, NOW())
+            ON CONFLICT (user_id) DO NOTHING
+            RETURNING user_id
+            """,
+            (user_id,),
+        ).fetchone()
+        return row is not None
+
+
+def release_digest_lock(user_id: int) -> None:
+    with get_connection() as conn:
+        conn.execute("DELETE FROM digest_locks WHERE user_id = %s", (user_id,))
 
 
 def get_users_with_gmail() -> list[dict]:
