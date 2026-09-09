@@ -164,11 +164,6 @@ def cron_run_digests(x_cron_secret: str = Header(default="")) -> dict:
         except Exception:
             tz = ZoneInfo("UTC")
 
-        # Which scheduled slot has most recently passed for this user?
-        # We ask "is this user overdue" rather than "is it exactly 9/13/17",
-        # because GitHub Actions drops and delays scheduled fires — often by
-        # hours. An exact-hour check silently loses the whole window; this
-        # catches up on the next fire instead.
         slot = _most_recent_slot(now_utc.astimezone(tz))
         if slot is None:
             results["skipped"].append(user_id)
