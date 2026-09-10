@@ -8,6 +8,7 @@ from email.message import EmailMessage
 from email.utils import getaddresses, formataddr
 from typing import Any
 
+import requests
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google.auth.exceptions import RefreshError
@@ -22,6 +23,7 @@ SCOPES = [
 
 # Google's OAuth token endpoints — needed to reconstruct Credentials and refresh.
 TOKEN_URI = "https://oauth2.googleapis.com/token"
+REVOKE_URI = "https://oauth2.googleapis.com/revoke"
 
 
 class GmailNotConnectedError(Exception):
@@ -116,6 +118,35 @@ def get_email_service(user_id: int) -> Any:
     # clones from this Credentials object (already refreshed, if needed).
     service._email_agent_creds = creds  # type: ignore[attr-defined]
     return service
+
+
+def revoke_gmail_token(token: str) -> None:
+    """Best-effort revoke of a Google OAuth token at Google's own endpoint.
+
+    Pass the refresh token, not the access token: revoking the refresh token
+    invalidates the *whole grant* (both tokens die together), which is what
+    makes Sift disappear from the user's Google Account -> "Third-party
+    access" page — not just from our database. Revoking only the access
+    token would leave the refresh token (and therefore the grant) alive at
+    Google even though we'd deleted our local copy.
+
+    Deliberately swallows failures. This is called right before we delete our
+    own copy of the connection (see db.delete_gmail_connection); the user's
+    intent — "disconnect Sift" — should succeed locally even if Google is
+    unreachable or the token was already invalid/expired. A user stuck unable
+    to disconnect because of a network blip would be worse than a stale grant
+    sitting at Google that a determined user could still revoke themselves
+    from myaccount.google.com.
+    """
+    try:
+        requests.post(
+            REVOKE_URI,
+            params={"token": token},
+            headers={"content-type": "application/x-www-form-urlencoded"},
+            timeout=5,
+        )
+    except requests.RequestException:
+        pass
 
 
 def fetch_recent_emails(

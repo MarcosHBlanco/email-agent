@@ -25,6 +25,7 @@ from email_agent.gmail_client import (
     SCOPES as GMAIL_SCOPES,
     fetch_email_body,
     get_email_service,
+    revoke_gmail_token,
     trash_email,
     untrash_email,
     build_reply_message,
@@ -684,6 +685,23 @@ def gmail_status(user: dict = Depends(get_current_user)) -> dict:
     if connection is None:
         return {"connected": False, "email": None}
     return {"connected": True, "email": connection["google_email"]}
+
+
+@app.post("/auth/gmail/disconnect")
+def gmail_disconnect(user: dict = Depends(get_current_user)) -> dict:
+    """Disconnect the current user's Gmail account.
+
+    Revokes the grant at Google first (best-effort — see revoke_gmail_token),
+    then deletes our copy of the tokens unconditionally. Order matters: once
+    we've deleted our copy we have nothing left to revoke, so revoke must
+    happen first, but its success is never a precondition for the local
+    delete — "disconnect" must always work from the user's point of view.
+    """
+    connection = db.get_gmail_connection(user["id"])
+    if connection is not None:
+        revoke_gmail_token(connection["refresh_token"])
+    db.delete_gmail_connection(user["id"])
+    return {"connected": False, "email": None}
 
 
 class ReplyRequest(BaseModel):

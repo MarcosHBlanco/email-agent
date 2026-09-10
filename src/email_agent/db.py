@@ -776,6 +776,23 @@ def release_digest_lock(user_id: int) -> None:
         conn.execute("DELETE FROM digest_locks WHERE user_id = %s", (user_id,))
 
 
+def delete_gmail_connection(user_id: int) -> bool:
+    """Forget a user's Gmail connection entirely — used by /auth/gmail/disconnect.
+
+    Returns False if there was nothing to disconnect (already disconnected),
+    which the caller treats as a no-op rather than an error. This is a hard
+    DELETE, not a soft flag: once removed, get_gmail_connection() sees the
+    user as never-connected, and get_email_service() raises
+    GmailNotConnectedError the next time anything tries to use Gmail for them.
+    """
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "DELETE FROM gmail_connections WHERE user_id = %s",
+            (user_id,),
+        )
+        return cursor.rowcount > 0
+
+
 def get_users_with_gmail() -> list[dict]:
     """Users who have connected Gmail, with their timezone.
 
