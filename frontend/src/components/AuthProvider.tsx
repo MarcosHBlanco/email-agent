@@ -22,6 +22,7 @@ interface AuthContextValue {
 	login: (email: string, password: string) => Promise<void>;
 	signup: (email: string, password: string) => Promise<void>;
 	logout: () => Promise<void>;
+	disconnectGmail: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -147,9 +148,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 		setGmail(null);
 	}
 
+	// Revokes Sift's access to Gmail (server-side: revokes at Google, then
+	// deletes our copy of the tokens — see /auth/gmail/disconnect). We trust
+	// the server's response body directly instead of re-fetching status
+	// afterward: it always returns the new, disconnected shape.
+	async function disconnectGmail(): Promise<void> {
+		const res = await fetch(`${API_BASE}/auth/gmail/disconnect`, {
+			method: "POST",
+			credentials: "include",
+		});
+		if (res.ok) {
+			const data = await res.json();
+			setGmail(data);
+		}
+	}
+
 	return (
 		<AuthContext.Provider
-			value={{ user, loading, gmail, refreshGmail, login, signup, logout }}
+			value={{
+				user,
+				loading,
+				gmail,
+				refreshGmail,
+				login,
+				signup,
+				logout,
+				disconnectGmail,
+			}}
 		>
 			{children}
 		</AuthContext.Provider>

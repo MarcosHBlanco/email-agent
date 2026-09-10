@@ -20,8 +20,8 @@
 	--routine: #5a9bd8;
 	--junk: #5a6488;
 
-	--glow-accent: rgba(91, 124, 250, 0.3);
-	--glow-soft: rgba(91, 124, 250, 0.14);
+	--glow-accent: rgba(91, 124, 250, 0.2);
+	--glow-soft: rgba(91, 124, 250, 0.09);
 
 	--font-display: "Fraunces", Georgia, serif;
 	--font-body: "Inter", system-ui, sans-serif;
@@ -81,12 +81,12 @@ html:has(.sift-landing) {
 	top: 0;
 	left: 50%;
 	transform: translateX(-50%);
-	width: 1000px;
-	height: 760px;
+	width: 860px;
+	height: 620px;
 	background: radial-gradient(circle, var(--glow-accent) 0%, transparent 62%);
 	pointer-events: none;
 	z-index: 0;
-	opacity: 0.7;
+	opacity: 0.45;
 }
 .sift-landing .wrap {
 	max-width: var(--maxw);
@@ -207,7 +207,7 @@ html:has(.sift-landing) {
 	height: 6px;
 	border-radius: 50%;
 	background: var(--accent-bright);
-	box-shadow: 0 0 8px var(--accent-bright);
+	box-shadow: 0 0 5px var(--accent-bright);
 }
 .sift-landing h1 {
 	font-family: var(--font-display);
@@ -299,7 +299,6 @@ html:has(.sift-landing) {
 	border-radius: 10px;
 	padding: 12px 14px;
 	margin-bottom: 10px;
-	animation: rawIn 0.5s ease both;
 }
 .sift-landing .raw-email .re-from {
 	font-size: 12px;
@@ -312,16 +311,6 @@ html:has(.sift-landing) {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-}
-@keyframes rawIn {
-	from {
-		opacity: 0;
-		transform: translateY(8px);
-	}
-	to {
-		opacity: 1;
-		transform: translateY(0);
-	}
 }
 .sift-landing .buckets {
 	padding: 22px 18px;
@@ -340,7 +329,7 @@ html:has(.sift-landing) {
 	display: flex;
 	flex-direction: column;
 }
-.sift-landing .bucket > div[id^="b"] {
+.sift-landing .bucket .bucket-list {
 	flex: 1;
 	overflow: hidden;
 }
@@ -388,8 +377,6 @@ html:has(.sift-landing) {
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	opacity: 0;
-	animation: sortedIn 0.5s ease forwards;
 }
 .sift-landing .sorted-email:first-of-type {
 	border-top: none;
@@ -397,16 +384,6 @@ html:has(.sift-landing) {
 .sift-landing .sorted-email .tick {
 	color: var(--accent-bright);
 	font-size: 12px;
-}
-@keyframes sortedIn {
-	from {
-		opacity: 0;
-		transform: translateX(-10px);
-	}
-	to {
-		opacity: 1;
-		transform: translateX(0);
-	}
 }
 .sift-landing .strip {
 	text-align: center;
@@ -572,17 +549,6 @@ html:has(.sift-landing) {
 	letter-spacing: 0.06em;
 	padding: 4px 11px;
 	border-radius: 100px;
-	opacity: 0;
-	transform: scale(0.8);
-}
-.sift-landing .mk-badge.show {
-	animation: badgePop 0.4s cubic-bezier(0.2, 1.4, 0.4, 1) forwards;
-}
-@keyframes badgePop {
-	to {
-		opacity: 1;
-		transform: scale(1);
-	}
 }
 .sift-landing .mk-reason {
 	font-size: 13px;
@@ -617,17 +583,6 @@ html:has(.sift-landing) {
 	border: 1px solid var(--border-soft);
 	border-radius: 10px;
 	margin-bottom: 9px;
-	opacity: 0;
-	transform: translateY(10px);
-}
-.sift-landing .mk-digest-row.show {
-	animation: digestIn 0.45s ease forwards;
-}
-@keyframes digestIn {
-	to {
-		opacity: 1;
-		transform: translateY(0);
-	}
 }
 .sift-landing .mk-digest-row .md-dot {
 	width: 8px;
@@ -679,17 +634,6 @@ html:has(.sift-landing) {
 	border-radius: 5px;
 	background: var(--bg-card);
 	border: 1px solid var(--border-soft);
-	transform: scale(0.5);
-	opacity: 0;
-}
-.sift-landing .mk-cell.show {
-	animation: cellIn 0.4s ease forwards;
-}
-@keyframes cellIn {
-	to {
-		transform: scale(1);
-		opacity: 1;
-	}
 }
 .sift-landing .mk-trend-wrap {
 	border-top: 1px solid var(--border-soft);
@@ -715,35 +659,12 @@ html:has(.sift-landing) {
 	stroke-width: 2.5;
 	stroke-linecap: round;
 	stroke-linejoin: round;
-	stroke-dasharray: 1000;
-	stroke-dashoffset: 1000;
-}
-.sift-landing .mk-trend.draw path.line {
-	animation: drawLine 1.6s ease forwards;
-}
-@keyframes drawLine {
-	to {
-		stroke-dashoffset: 0;
-	}
 }
 .sift-landing .mk-trend path.area {
 	fill: url(#trendFill);
-	opacity: 0;
-}
-.sift-landing .mk-trend.draw path.area {
-	animation: fadeArea 0.8s ease 0.9s forwards;
-}
-@keyframes fadeArea {
-	to {
-		opacity: 1;
-	}
 }
 .sift-landing .mk-trend circle.pt {
 	fill: var(--accent-bright);
-	opacity: 0;
-}
-.sift-landing .mk-trend.draw circle.pt {
-	animation: fadeArea 0.4s ease 1.5s forwards;
 }
 
 .sift-landing .mk-actions {
@@ -957,25 +878,14 @@ html:has(.sift-landing) {
 	font-size: 13px;
 	font-family: var(--font-mono);
 }
-.sift-landing .reveal {
-	opacity: 0;
-	transform: translateY(24px);
-	transition:
-		opacity 0.7s ease,
-		transform 0.7s ease;
-}
-.sift-landing .reveal.in {
-	opacity: 1;
-	transform: translateY(0);
-}
 @media (prefers-reduced-motion: reduce) {
+	/* Scroll reveals and mockups are handled in JS via motion/react's
+	   useReducedMotion() — see lib/motion.ts and page.tsx. This block only
+	   needs to catch the remaining plain-CSS transitions/animations (hover
+	   states, the typing cursor, button lifts) that motion doesn't touch. */
 	.sift-landing * {
 		animation: none !important;
 		transition: none !important;
-	}
-	.sift-landing .reveal {
-		opacity: 1;
-		transform: none;
 	}
 	html:has(.sift-landing) {
 		scroll-behavior: auto;

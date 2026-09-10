@@ -10,17 +10,34 @@ import { API_BASE } from "@/lib/config";
 export default function Header() {
 	const { theme, toggleTheme } = useTheme();
 	const [mounted, setMounted] = useState(false);
+	const [disconnecting, setDisconnecting] = useState(false);
 
 	function connectGmail() {
 		window.location.href = `${API_BASE}/auth/gmail/connect`;
 	}
 
-	const { user, gmail, logout } = useAuth();
+	const { user, gmail, logout, disconnectGmail } = useAuth();
 	const router = useRouter();
 
 	async function handleLogout() {
 		await logout();
 		router.push("/login");
+	}
+
+	async function handleDisconnect() {
+		// A confirm dialog costs one extra click, but disconnecting mid-digest
+		// silently stops all Gmail access until the user reconnects — cheap
+		// insurance against a misclick undoing something the user didn't mean.
+		const ok = window.confirm(
+			"Disconnect Gmail? Sift will stop reading and processing your inbox until you reconnect.",
+		);
+		if (!ok) return;
+		setDisconnecting(true);
+		try {
+			await disconnectGmail();
+		} finally {
+			setDisconnecting(false);
+		}
 	}
 
 	useEffect(() => {
@@ -46,10 +63,29 @@ export default function Header() {
 			{/* Gmail connection status */}
 			<div className="flex items-center">
 				{gmail?.connected ? (
-					<div className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-ink-soft">
+					<div className="flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-ink-soft">
 						<span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
 						<span className="hidden sm:inline">{gmail.email}</span>
 						<span className="sm:hidden">Gmail</span>
+						<button
+							onClick={handleDisconnect}
+							disabled={disconnecting}
+							title="Disconnect Gmail"
+							aria-label="Disconnect Gmail"
+							className="ml-1 flex h-5 w-5 items-center justify-center rounded text-ink-faint transition-colors hover:bg-important-soft hover:text-important disabled:opacity-50"
+						>
+							<svg
+								width="12"
+								height="12"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								strokeWidth="2.4"
+								strokeLinecap="round"
+							>
+								<path d="M18 6 6 18M6 6l12 12" />
+							</svg>
+						</button>
 					</div>
 				) : gmail && !gmail.connected ? (
 					<button
