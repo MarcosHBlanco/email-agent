@@ -52,6 +52,19 @@ def close_pool() -> None:
         _pool = None
 
 
+def pool_stats() -> dict[str, int]:
+    """DB connection-pool usage snapshot. Secret-gated: operational
+    introspection, not user data — shouldn't be public.
+
+    Watch requests_waiting: callers waiting for a connection right now (a
+    live gauge). If it stays at 0 across busy moments, there's no contention
+    and a priority pool would solve a problem Sift doesn't have.
+    """
+    if _pool is None:
+        return {}
+    return _pool.get_stats()
+
+
 @contextmanager
 def get_connection() -> Iterator[Connection[DictRow]]:
     """Borrow a pooled connection, commit on success, roll back on error.

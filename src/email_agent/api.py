@@ -243,6 +243,18 @@ def read_root() -> dict:
     """Health check: confirms the API is running."""
     return {"status": "ok", "service": "email-agent"}
 
+@app.get("/admin/pool-stats")
+def admin_pool_stats(x_cron_secret: str = Header(default="")) -> dict:
+    """DB connection-pool usage snapshot. Secret-gated: operational
+    introspection, not user data — shouldn't be public.
+
+    Watch requests_queued: cumulative count of callers who had to wait for a
+    connection. If it stays at 0, there's no contention and a priority pool
+    would solve a problem Sift doesn't have.
+    """
+    if not CRON_SECRET or not secrets.compare_digest(x_cron_secret, CRON_SECRET):
+        raise HTTPException(status_code=401, detail="Not authorized")
+    return db.pool_stats()
 
 @app.get("/digest/latest")
 def get_latest_digest(user: dict = Depends(get_current_user)) -> dict:
