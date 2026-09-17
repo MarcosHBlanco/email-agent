@@ -8,6 +8,8 @@ caller's responsibility.
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 
+import sentry_sdk
+
 from email_agent import config, db
 from email_agent.categorizer import CategorizationResult, categorize_email
 from email_agent.gmail_client import get_email_service, fetch_recent_emails
@@ -82,7 +84,26 @@ def _run_digest_locked(user_id: int) -> dict | None:
             }
             for future in as_completed(futures):
                 email = futures[future]
-                categorized.append((email, future.result()))
+                # One email's Claude call can fail on its own (a timeout, a
+                # rate limit, a network blip) without the OTHER emails in
+                # this batch having done anything wrong. Before this
+                # try/except, future.result() re-raising here would escape
+                # this whole function and throw away every already-succeeded
+                # result in `categorized` too — a single bad email meant the
+                # entire batch produced no digest at all, even though most of
+                # it worked and was already paid for (in Claude API calls).
+                #
+                # Skipping this one email is also safe, not just "less bad":
+                # it's never marked "known" (that only happens below, via
+                # save_categorization), so the next digest run will simply
+                # see it as new again and retry it automatically.
+                try:
+                    categorized.append((email, future.result()))
+                except Exception as e:
+                    sentry_sdk.capture_exception(
+                        e,
+                        tags={"phase": "categorize_email", "user_id": user_id},
+                    )
 
     for email, result in categorized:
         db.save_categorization(
@@ -107,7 +128,10 @@ def _run_digest_locked(user_id: int) -> dict | None:
         )
 
     run_data = {
-        "total": len(new_emails),
+        # len(categorized), not len(new_emails): if any email failed above,
+        # it isn't in `categorized`, and this digest should say how many
+        # emails it actually has results for — not how many it attempted.
+        "total": len(categorized),
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "buckets": run_buckets,
     }
