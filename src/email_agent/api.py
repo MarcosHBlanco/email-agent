@@ -245,6 +245,14 @@ def read_root() -> dict:
     return {"status": "ok", "service": "email-agent"}
 
 
+@app.get("/debug/sentry-test")
+def debug_sentry_test():
+    """TEMPORARY — verify Sentry captures a real production exception.
+    Delete this route immediately after confirming it appears in Sentry.
+    """
+    raise RuntimeError("Sentry verification — deliberate test exception")
+
+
 @app.get("/admin/pool-stats")
 def admin_pool_stats(x_cron_secret: str = Header(default="")) -> dict:
     """DB connection-pool usage snapshot. Secret-gated: operational
