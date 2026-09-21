@@ -13,6 +13,7 @@ from contextlib import asynccontextmanager
 from typing import Literal
 from zoneinfo import ZoneInfo
 
+from cffi import verifier
 from fastapi.responses import JSONResponse, RedirectResponse
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
@@ -243,6 +244,7 @@ def read_root() -> dict:
     """Health check: confirms the API is running."""
     return {"status": "ok", "service": "email-agent"}
 
+
 @app.get("/admin/pool-stats")
 def admin_pool_stats(x_cron_secret: str = Header(default="")) -> dict:
     """DB connection-pool usage snapshot. Secret-gated: operational
@@ -255,6 +257,7 @@ def admin_pool_stats(x_cron_secret: str = Header(default="")) -> dict:
     if not CRON_SECRET or not secrets.compare_digest(x_cron_secret, CRON_SECRET):
         raise HTTPException(status_code=401, detail="Not authorized")
     return db.pool_stats()
+
 
 @app.get("/digest/latest")
 def get_latest_digest(user: dict = Depends(get_current_user)) -> dict:
@@ -304,9 +307,7 @@ def process_digest(user: dict = Depends(get_current_user)) -> dict:
 
     Slow — calls Claude for each new email. Returns the freshly produced digest.
     """
-    if not limiter.allow(
-        f"digest:{user['id']}", limit=6, window_seconds=3600
-    ):
+    if not limiter.allow(f"digest:{user['id']}", limit=6, window_seconds=3600):
         raise HTTPException(
             status_code=429,
             detail="Too many digest runs. Try again later.",
@@ -611,7 +612,9 @@ def get_me(user: dict = Depends(get_current_user)) -> dict:
     return {"id": user["id"], "email": user["email"]}
 
 
-def build_gmail_flow(*, code_verifier: str | None = None, generate_pkce: bool = False) -> Flow:
+def build_gmail_flow(
+    *, code_verifier: str | None = None, generate_pkce: bool = False
+) -> Flow:
     """Build a Gmail OAuth Flow.
 
     We are a confidential client (server-side secret) AND we use PKCE.
@@ -634,18 +637,27 @@ def gmail_connect(user: dict = Depends(get_current_user)):
     """Start the Gmail OAuth flow: redirect the user to Google's consent screen."""
     flow = build_gmail_flow(generate_pkce=True)
 
-    # Generate a random state (CSRF ticket) and remember it + PKCE verifier.
     state = secrets.token_urlsafe(32)
-    db.save_oauth_state(state, user["id"], flow.code_verifier or "")
 
-    # Build Google's authorization URL.
+    # Build the authorization URL FIRST — the google library generates the
+    # PKCE code_verifier lazily inside authorization_url(), not when the Flow
+    # is constructed. Reading flow.code_verifier before this call gets None,
+    # which we'd then persist as an empty verifier — and the callback's token
+    # exchange fails with "Missing code verifier". So: generate, THEN save.
     auth_url, _ = flow.authorization_url(
         access_type="offline",  # so we get a refresh token
         prompt="consent",  # force the consent screen (ensures refresh token)
         state=state,  # our CSRF ticket, round-trip through Google
     )
 
-    # Redirect the user's browser to Google.
+    verifier = flow.code_verifier
+    if not verifier:
+        # Should never happen after authorization_url(); if it does, fail here
+        # with a clear cause instead of a confusing "missing verifier" at callback.
+        raise HTTPException(status_code=500, detail="PKCE verifier not generated")
+
+    db.save_oauth_state(state, user["id"], verifier)
+
     return RedirectResponse(auth_url)
 
 
