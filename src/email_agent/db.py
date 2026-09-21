@@ -367,7 +367,7 @@ def get_todays_digest(user_id: int) -> dict | None:
               AND is_trashed = FALSE
               AND categorized_at >= %s
               AND categorized_at <  %s
-            ORDER BY categorized_at DESC, id DESC
+            ORDER BY received_at DESC NULLS LAST, id DESC
             """,
             (user_id, start_utc, end_utc),
         ).fetchall()
