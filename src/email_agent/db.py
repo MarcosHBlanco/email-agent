@@ -40,6 +40,7 @@ def init_pool() -> None:
         min_size=1,
         max_size=10,
         timeout=30,
+        check=ConnectionPool.check_connection,
         kwargs={"row_factory": dict_row},
         open=True,
     )
